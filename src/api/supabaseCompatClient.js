@@ -170,8 +170,9 @@ const isTokenFromCurrentProject = (token) => {
   if (!isJwtLike(token)) return false;
 
   const payload = decodeJwtPayload(token);
+  if (!payload || typeof payload !== 'object') return false;
   const issuer = payload?.iss;
-  if (typeof issuer !== 'string' || !issuer) return true;
+  if (typeof issuer !== 'string' || !issuer) return false;
 
   try {
     const issuerHost = new URL(issuer).hostname;
@@ -349,8 +350,16 @@ const ensureValidAccessToken = async () => {
     return refreshedWithoutAccess || null;
   }
 
+  const tokenPayload = decodeJwtPayload(token);
+  if (!tokenPayload) {
+    const refreshedMalformed = await refreshSession();
+    if (refreshedMalformed) return refreshedMalformed;
+    clearStoredSession();
+    return null;
+  }
+
   const now = Math.floor(Date.now() / 1000);
-  const exp = getTokenExpiry(token);
+  const exp = Number(tokenPayload?.exp || 0);
   // Se nao conseguirmos ler exp, mantemos o token atual e deixamos o backend validar.
   const shouldRefresh = exp > 0 && exp - now < 60;
 
