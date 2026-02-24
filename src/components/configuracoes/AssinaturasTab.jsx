@@ -125,25 +125,35 @@ export default function AssinaturasTab({ confeitaria, onUpdate }) {
   };
 
   const handleOpenBilling = async () => {
+    const loadingToastId = toast.loading('Abrindo cobrança...');
     try {
       setLoading(true);
+
+      console.log('🚀 Iniciando processo de checkout para confeitaria:', confeitaria?.id);
+      
+      if (!confeitaria?.id) {
+        console.error('❌ Erro: confeitaria.id está ausente!', confeitaria);
+        throw new Error('Identificador da confeitaria não encontrado. Tente atualizar a página.');
+      }
 
       const response = await appClient.functions.invoke('createCheckoutSession', {
         confeitaria_id: confeitaria.id
       });
 
       if (response?.data?.url) {
+        toast.dismiss(loadingToastId);
         window.location.href = response.data.url;
       } else {
         throw new Error('URL de cobrança não retornada');
       }
     } catch (error) {
+      toast.dismiss(loadingToastId);
       console.error('❌ Erro ao abrir cobrança:', error);
       if (Number(error?.status) === 401 || /unauthorized|invalid jwt/i.test(String(error?.message || ''))) {
         appClient.auth.redirectToLogin(buildBillingReturnUrl());
         return;
       }
-      alert(`Erro ao abrir cobrança: ${error.message}`);
+      toast.error(`Erro ao abrir cobrança: ${error.message}`);
     } finally {
       setLoading(false);
     }
@@ -275,6 +285,7 @@ export default function AssinaturasTab({ confeitaria, onUpdate }) {
 
           <div className="pt-4 border-t space-y-2">
             <Button
+              type="button"
               onClick={handleOpenBilling}
               disabled={loading}
               className="w-full bg-gradient-to-r from-rose-500 to-rose-600"
@@ -289,6 +300,7 @@ export default function AssinaturasTab({ confeitaria, onUpdate }) {
             </Button>
             {hasOngoingSubscription && !confeitaria?.data_proximo_pagamento && (
               <Button
+                type="button"
                 onClick={handleSyncSubscription}
                 disabled={loading}
                 variant="ghost"

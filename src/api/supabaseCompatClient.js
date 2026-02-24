@@ -478,16 +478,26 @@ const requestFunction = async (name, payload) => {
       await validateAccessTokenWithAuthApi(token);
     }
 
-    return {
+    const authHeaders = {
       apikey: supabaseAnonKey || '',
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`
     };
+
+    console.log(`[supabase-client] Chamando Edge Function: ${name}`, {
+      apikey_preview: authHeaders.apikey ? `${authHeaders.apikey.slice(0, 10)}...` : 'empty',
+      auth_header: authHeaders.Authorization ? 'Bearer <token>' : 'none'
+    });
+
+    return authHeaders;
   };
+
+  const headers = await getFunctionHeaders();
+  console.log(`[supabase-client] Payload para ${name}:`, payload);
 
   let response = await fetch(`${supabaseUrl}/functions/v1/${name}`, {
     method: 'POST',
-    headers: await getFunctionHeaders(),
+    headers,
     body: JSON.stringify(payload || {})
   });
 
@@ -524,12 +534,12 @@ const requestRpc = async (name, payload, options = {}) => {
   const asAnon = options?.asAnon === true;
   const headers = asAnon
     ? {
-        apikey: supabaseAnonKey || '',
-        'Content-Type': 'application/json'
-      }
+      apikey: supabaseAnonKey || '',
+      'Content-Type': 'application/json'
+    }
     : await buildAuthHeaders({
-        'Content-Type': 'application/json'
-      });
+      'Content-Type': 'application/json'
+    });
 
   const response = await fetch(`${supabaseUrl}/rest/v1/rpc/${name}`, {
     method: 'POST',
