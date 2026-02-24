@@ -1,0 +1,812 @@
+import React, { useEffect, useState } from 'react';
+import { appClient } from '@/api/appClient';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { createCatalogUrl, createPageUrl } from '@/utils';
+import { useAuth } from '@/lib/AuthContext';
+import {
+  Store,
+  Plus,
+  Pencil,
+  Trash2,
+  Save,
+  Settings2,
+  ExternalLink,
+  Upload,
+  X,
+  CreditCard,
+  Sparkles
+} from 'lucide-react';
+import AssinaturasTab from '@/components/configuracoes/AssinaturasTab';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { TelefoneInput, MoedaInput } from '@/components/ui/masked-input';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Switch } from '@/components/ui/switch';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useToast } from '@/components/ui/use-toast';
+
+
+
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+
+export default function Configuracoes() {
+  const { user } = useAuth();
+  const { toast, dismiss } = useToast();
+  const urlParams = new URLSearchParams(window.location.search);
+  const [activeTab, setActiveTab] = useState(urlParams.get('tab') || 'geral');
+  const queryClient = useQueryClient();
+
+  // Form states
+  const [confeitariaForm, setConfeitariaForm] = useState({
+    nome: '',
+    slug: '',
+    descricao: '',
+    logo_url: '',
+    cor_principal: '',
+    telefone: '',
+    endereco: '',
+    instagram: '',
+    prazo_minimo_dias: 3,
+    habilitar_taxa_urgencia: true,
+    taxa_urgencia_percentual: 20,
+    taxa_delivery: 0,
+    receber_pedidos_whatsapp: true,
+    exibir_pedido_personalizado: true,
+    frase_pedido_personalizado: 'Monte seu Bolo Personalizado',
+    horario_funcionamento: { inicio: '', fim: '' },
+    dias_funcionamento: [],
+  });
+
+  // Item forms
+  const [showItemForm, setShowItemForm] = useState(false);
+  const [editingItem, setEditingItem] = useState(null);
+  const [itemType, setItemType] = useState('massa');
+  const [itemForm, setItemForm] = useState({});
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+
+  useEffect(() => {
+    if (user && !user.confeitaria_id) {
+      window.location.href = createPageUrl('Onboarding');
+    }
+  }, [user]);
+
+  const { data: confeitaria, refetch: refetchConfeitaria } = useQuery({
+    queryKey: ['confeitaria', user?.confeitaria_id],
+    queryFn: async () => {
+      const list = await appClient.entities.Confeitaria.filter({ id: user.confeitaria_id });
+      const conf = list[0];
+      if (conf) {
+        setConfeitariaForm({
+          nome: conf.nome || '',
+          slug: conf.slug || '',
+          descricao: conf.descricao || '',
+          logo_url: conf.logo_url || '',
+          cor_principal: conf.cor_principal || '',
+          telefone: conf.telefone || '',
+          endereco: conf.endereco || '',
+          instagram: conf.instagram || '',
+          prazo_minimo_dias: conf.prazo_minimo_dias || 3,
+          habilitar_taxa_urgencia: conf.habilitar_taxa_urgencia !== false,
+          taxa_urgencia_percentual: conf.taxa_urgencia_percentual || 20,
+          taxa_delivery: conf.taxa_delivery || 0,
+          receber_pedidos_whatsapp: conf.receber_pedidos_whatsapp !== false,
+          exibir_pedido_personalizado: conf.exibir_pedido_personalizado !== false,
+          frase_pedido_personalizado: conf.frase_pedido_personalizado || 'Monte seu Bolo Personalizado',
+          horario_funcionamento: conf.horario_funcionamento || { inicio: '', fim: '' },
+          dias_funcionamento: conf.dias_funcionamento || [],
+        });
+      }
+      return conf;
+    },
+    enabled: !!user?.confeitaria_id,
+  });
+
+  const { data: formasPagamento = [] } = useQuery({
+    queryKey: ['formasPagamento', user?.confeitaria_id],
+    queryFn: () => appClient.entities.FormaPagamento.filter({ confeitaria_id: user.confeitaria_id }),
+    enabled: !!user?.confeitaria_id,
+  });
+
+  // Mutations
+  const buildConfeitariaPayload = () => ({
+    nome: confeitariaForm.nome?.trim() || '',
+    descricao: confeitariaForm.descricao || '',
+    logo_url: confeitariaForm.logo_url || '',
+    cor_principal: confeitariaForm.cor_principal || '',
+    telefone: confeitariaForm.telefone || '',
+    endereco: confeitariaForm.endereco || '',
+    instagram: confeitariaForm.instagram || '',
+    prazo_minimo_dias: Number(confeitariaForm.prazo_minimo_dias) || 0,
+    habilitar_taxa_urgencia: !!confeitariaForm.habilitar_taxa_urgencia,
+    taxa_urgencia_percentual: Number(confeitariaForm.taxa_urgencia_percentual) || 0,
+    taxa_delivery: Number(confeitariaForm.taxa_delivery) || 0,
+    receber_pedidos_whatsapp: !!confeitariaForm.receber_pedidos_whatsapp,
+    exibir_pedido_personalizado: !!confeitariaForm.exibir_pedido_personalizado,
+    frase_pedido_personalizado: confeitariaForm.frase_pedido_personalizado || '',
+    horario_funcionamento: confeitariaForm.horario_funcionamento || { inicio: '', fim: '' },
+    dias_funcionamento: Array.isArray(confeitariaForm.dias_funcionamento)
+      ? confeitariaForm.dias_funcionamento
+      : []
+  });
+
+  const updateConfeitaria = useMutation({
+    mutationFn: async () => {
+      if (!confeitaria?.id) {
+        throw new Error('Confeitaria não encontrada para salvar as configurações.');
+      }
+
+      const payload = buildConfeitariaPayload();
+      let updated = await appClient.entities.Confeitaria.update(confeitaria.id, payload);
+
+      // Fallback para casos em que o perfil perdeu o confeitaria_id e o RLS bloqueia update.
+      if (!updated?.id) {
+        try {
+          await appClient.auth.updateMe({ confeitaria_id: confeitaria.id });
+          updated = await appClient.entities.Confeitaria.update(confeitaria.id, payload);
+        } catch (syncError) {
+          console.error('Falha ao sincronizar confeitaria_id antes de salvar:', syncError);
+        }
+      }
+
+      if (!updated?.id) {
+        throw new Error(
+          'Não foi possível atualizar os dados da confeitaria. Refaça o login para renovar a sessão e tente novamente.'
+        );
+      }
+      return updated;
+    },
+    onSuccess: async (data) => {
+      queryClient.setQueryData(['confeitaria', user?.confeitaria_id], data);
+      await queryClient.invalidateQueries({ queryKey: ['confeitaria', user?.confeitaria_id] });
+      dismiss();
+      toast({
+        title: 'Configurações salvas',
+        description: 'As alterações foram salvas com sucesso.',
+        duration: 2500
+      });
+    },
+    onError: (error) => {
+      if (Number(error?.status) === 401) {
+        appClient.auth.redirectToLogin(window.location.href);
+        return;
+      }
+
+      toast({
+        title: 'Erro ao salvar',
+        description: error?.message || 'Não foi possível salvar as configurações.',
+        variant: 'destructive'
+      });
+    }
+  });
+
+  const getEntityForType = (type) => {
+    switch (type) {
+      case 'FormaPagamento': return appClient.entities.FormaPagamento;
+      default: return null;
+    }
+  };
+
+  const invalidateEntityQueries = (type) => {
+    if (type === 'FormaPagamento') {
+      queryClient.invalidateQueries(['formasPagamento', user?.confeitaria_id]);
+      return;
+    }
+    queryClient.invalidateQueries([`${type}s`]);
+  };
+
+  const saveItem = useMutation({
+    mutationFn: async ({ type, data, id }) => {
+      const entity = getEntityForType(type);
+      if (id) {
+        return entity.update(id, data);
+      }
+      return entity.create({
+        ...data,
+        confeitaria_id: user.confeitaria_id,
+      });
+    },
+    onSuccess: () => {
+      invalidateEntityQueries(itemType);
+      closeItemForm();
+    },
+  });
+
+  const deleteItem = useMutation({
+    mutationFn: async ({ type, id }) => {
+      const entity = getEntityForType(type);
+      return entity.delete(id);
+    },
+    onSuccess: (_, { type }) => {
+      invalidateEntityQueries(type);
+    },
+  });
+
+  const toggleItemActive = useMutation({
+    mutationFn: async ({ type, id, ativo }) => {
+      const entity = getEntityForType(type);
+      return entity.update(id, { ativo });
+    },
+    onSuccess: (_, { type }) => {
+      invalidateEntityQueries(type);
+    },
+  });
+
+  const openItemForm = (type, item = null) => {
+    setItemType(type);
+    setEditingItem(item);
+    
+    if (item) {
+      setItemForm({ ...item });
+    } else {
+      setItemForm({ nome: '', ativo: true });
+    }
+    setShowItemForm(true);
+  };
+
+  const closeItemForm = () => {
+    setShowItemForm(false);
+    setEditingItem(null);
+    setItemForm({});
+  };
+
+  const handleLogoUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadingLogo(true);
+    try {
+      const { file_url } = await appClient.integrations.Core.UploadFile({ file });
+      setConfeitariaForm({ ...confeitariaForm, logo_url: file_url });
+      toast({
+        title: 'Imagem enviada',
+        description: 'Upload concluído com sucesso.',
+        duration: 2500
+      });
+    } catch (error) {
+      console.error('Erro ao fazer upload:', error);
+      toast({
+        title: 'Erro no upload da imagem',
+        description: error?.message || 'Não foi possível enviar a imagem.',
+        variant: 'destructive'
+      });
+    } finally {
+      setUploadingLogo(false);
+    }
+  };
+
+  const renderItemFormFields = () => {
+    return (
+      <div>
+        <Label>Nome *</Label>
+        <Input
+          value={itemForm.nome || ''}
+          onChange={(e) => setItemForm({ ...itemForm, nome: e.target.value })}
+          placeholder="Ex: PIX, Dinheiro, Cartão de Crédito"
+        />
+      </div>
+    );
+  };
+
+  const ItemCard = ({ item, icon: Icon }) => (
+    <div className={`flex items-center justify-between p-4 rounded-xl ${item.ativo !== false ? 'bg-gray-50' : 'bg-gray-100 opacity-60'}`}>
+      <div className="flex items-center gap-3">
+        <div className="p-2 rounded-lg bg-rose-100">
+          <Icon className="w-4 h-4 text-rose-600" />
+        </div>
+        <div>
+          <p className="font-medium text-gray-900">{item.nome}</p>
+        </div>
+      </div>
+      <div className="flex items-center gap-2">
+        <Switch
+          checked={item.ativo !== false}
+          onCheckedChange={(checked) => toggleItemActive.mutate({ type: 'FormaPagamento', id: item.id, ativo: checked })}
+        />
+        <Button size="icon" variant="ghost" onClick={() => openItemForm('FormaPagamento', item)}>
+          <Pencil className="w-4 h-4" />
+        </Button>
+        <Button
+          size="icon"
+          variant="ghost"
+          className="text-red-600 hover:bg-red-50"
+          onClick={() => deleteItem.mutate({ type: 'FormaPagamento', id: item.id })}
+        >
+          <Trash2 className="w-4 h-4" />
+        </Button>
+      </div>
+    </div>
+  );
+
+  if (!user) return null;
+
+  return (
+    <div className="space-y-6">
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList className="grid w-full grid-cols-4 bg-white border-b border-gray-200 p-0 rounded-none h-auto gap-0">
+          <TabsTrigger 
+            value="geral" 
+            className="flex flex-col items-center justify-center gap-1 rounded-none border-b-2 border-transparent px-4 py-4 text-gray-600 hover:text-rose-600 data-[state=active]:border-rose-500 data-[state=active]:text-rose-600 data-[state=active]:bg-white transition-all"
+          >
+            <Settings2 className="w-5 h-5" />
+            <span className="text-xs font-medium">Geral</span>
+          </TabsTrigger>
+          <TabsTrigger 
+            value="catalogo" 
+            className="flex flex-col items-center justify-center gap-1 rounded-none border-b-2 border-transparent px-4 py-4 text-gray-600 hover:text-rose-600 data-[state=active]:border-rose-500 data-[state=active]:text-rose-600 data-[state=active]:bg-white transition-all"
+          >
+            <ExternalLink className="w-5 h-5" />
+            <span className="text-xs font-medium">Catálogo</span>
+          </TabsTrigger>
+          <TabsTrigger 
+            value="pagamentos"
+            className="flex flex-col items-center justify-center gap-1 rounded-none border-b-2 border-transparent px-4 py-4 text-gray-600 hover:text-rose-600 data-[state=active]:border-rose-500 data-[state=active]:text-rose-600 data-[state=active]:bg-white transition-all"
+          >
+            <CreditCard className="w-5 h-5" />
+            <span className="text-xs font-medium">Pag.</span>
+          </TabsTrigger>
+          <TabsTrigger 
+            value="assinaturas" 
+            className="flex flex-col items-center justify-center gap-1 rounded-none border-b-2 border-transparent px-4 py-4 text-gray-600 hover:text-rose-600 data-[state=active]:border-rose-500 data-[state=active]:text-rose-600 data-[state=active]:bg-white transition-all"
+          >
+            <Sparkles className="w-5 h-5" />
+            <span className="text-xs font-medium">Assin.</span>
+          </TabsTrigger>
+        </TabsList>
+
+        {/* Geral */}
+        <TabsContent value="geral" className="mt-6">
+          <Card className="border-0 shadow-lg shadow-gray-100/50">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Store className="w-5 h-5 text-rose-500" />
+                Dados da Confeitaria
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div>
+                <h4 className="font-semibold text-gray-900 mb-4">Informações Básicas</h4>
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div>
+                    <Label>Nome da Confeitaria</Label>
+                    <Input
+                      value={confeitariaForm.nome}
+                      onChange={(e) => setConfeitariaForm({ ...confeitariaForm, nome: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <Label>Telefone / WhatsApp</Label>
+                    <TelefoneInput
+                      value={confeitariaForm.telefone}
+                      onChange={(e) => setConfeitariaForm({ ...confeitariaForm, telefone: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <Label>Instagram</Label>
+                    <Input
+                      value={confeitariaForm.instagram}
+                      onChange={(e) => setConfeitariaForm({ ...confeitariaForm, instagram: e.target.value })}
+                      placeholder="@suaconfeitaria"
+                    />
+                  </div>
+                  <div>
+                    <Label>Endereço</Label>
+                    <Input
+                      value={confeitariaForm.endereco}
+                      onChange={(e) => setConfeitariaForm({ ...confeitariaForm, endereco: e.target.value })}
+                    />
+                  </div>
+                  <div className="md:col-span-2">
+                    <Label>Descrição (para o catálogo público)</Label>
+                    <Textarea
+                      value={confeitariaForm.descricao}
+                      onChange={(e) => setConfeitariaForm({ ...confeitariaForm, descricao: e.target.value })}
+                      placeholder="Conte sobre sua confeitaria..."
+                      className="min-h-[80px]"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-4 border-t">
+                <h4 className="font-semibold text-gray-900 mb-4">Horário de Funcionamento</h4>
+                <div className="space-y-4">
+                  <div className="grid md:grid-cols-2 gap-4">
+                    <div>
+                      <Label>Horário de Abertura</Label>
+                      <Input
+                        type="time"
+                        value={confeitariaForm.horario_funcionamento?.inicio || ''}
+                        onChange={(e) => setConfeitariaForm({
+                          ...confeitariaForm,
+                          horario_funcionamento: {
+                            ...confeitariaForm.horario_funcionamento,
+                            inicio: e.target.value
+                          }
+                        })}
+                      />
+                    </div>
+                    <div>
+                      <Label>Horário de Fechamento</Label>
+                      <Input
+                        type="time"
+                        value={confeitariaForm.horario_funcionamento?.fim || ''}
+                        onChange={(e) => setConfeitariaForm({
+                          ...confeitariaForm,
+                          horario_funcionamento: {
+                            ...confeitariaForm.horario_funcionamento,
+                            fim: e.target.value
+                          }
+                        })}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="mb-3 block">Dias de Funcionamento</Label>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2">
+                      {[
+                        { value: 'seg', label: 'Seg' },
+                        { value: 'ter', label: 'Ter' },
+                        { value: 'qua', label: 'Qua' },
+                        { value: 'qui', label: 'Qui' },
+                        { value: 'sex', label: 'Sex' },
+                        { value: 'sab', label: 'Sáb' },
+                        { value: 'dom', label: 'Dom' },
+                      ].map((dia) => {
+                        const isSelected = confeitariaForm.dias_funcionamento?.includes(dia.value);
+                        return (
+                          <label
+                            key={dia.value}
+                            className={`flex items-center justify-center p-2 rounded-lg border-2 cursor-pointer transition-colors ${
+                              isSelected
+                                ? 'bg-rose-100 border-rose-500 text-rose-700'
+                                : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
+                            }`}
+                          >
+                            <Checkbox
+                              checked={isSelected}
+                              onCheckedChange={(checked) => {
+                                const dias = confeitariaForm.dias_funcionamento || [];
+                                setConfeitariaForm({
+                                  ...confeitariaForm,
+                                  dias_funcionamento: checked
+                                    ? [...dias, dia.value]
+                                    : dias.filter(d => d !== dia.value)
+                                });
+                              }}
+                              className="sr-only"
+                            />
+                            <span className="text-sm font-medium">{dia.label}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-4 border-t">
+                <h4 className="font-semibold text-gray-900 mb-4">Regras de Negócio</h4>
+                <div className="space-y-4">
+                  <div className="grid md:grid-cols-2 gap-4">
+                    <div>
+                      <Label>Prazo Mínimo para Encomendas (dias)</Label>
+                      <Input
+                        type="number"
+                        value={confeitariaForm.prazo_minimo_dias}
+                        onChange={(e) => setConfeitariaForm({ ...confeitariaForm, prazo_minimo_dias: parseInt(e.target.value) || 0 })}
+                      />
+                    </div>
+                    <div>
+                      <Label>Taxa de Delivery</Label>
+                      <MoedaInput
+                        value={confeitariaForm.taxa_delivery?.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || ''}
+                        onChange={(e) => {
+                          const valor = parseFloat(e.target.value.replace(/\./g, '').replace(',', '.')) || 0;
+                          setConfeitariaForm({ ...confeitariaForm, taxa_delivery: valor });
+                        }}
+                        placeholder="0,00"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="p-4 bg-gray-50 rounded-xl space-y-4">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <Label className="text-base font-medium text-gray-900">
+                          Habilitar Taxa de Urgência
+                        </Label>
+                        <p className="text-sm text-gray-500 mt-1">
+                          Cobra uma taxa adicional para pedidos realizados com menos do que o prazo mínimo
+                        </p>
+                      </div>
+                      <Switch
+                        checked={confeitariaForm.habilitar_taxa_urgencia}
+                        onCheckedChange={(checked) => setConfeitariaForm({ ...confeitariaForm, habilitar_taxa_urgencia: checked })}
+                        className="ml-4"
+                      />
+                    </div>
+                    {confeitariaForm.habilitar_taxa_urgencia && (
+                      <div>
+                        <Label>Taxa de Urgência (%)</Label>
+                        <Input
+                          type="number"
+                          value={confeitariaForm.taxa_urgencia_percentual}
+                          onChange={(e) => setConfeitariaForm({ ...confeitariaForm, taxa_urgencia_percentual: parseInt(e.target.value) || 0 })}
+                          placeholder="20"
+                        />
+                        <p className="text-xs text-gray-500 mt-2">
+                          Percentual cobrado sobre o valor total do pedido quando feito com urgência
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <Button
+                onClick={() => updateConfeitaria.mutate()}
+                disabled={updateConfeitaria.isPending || !confeitaria?.id}
+                className="bg-rose-500 hover:bg-rose-600"
+              >
+                <Save className="w-4 h-4 mr-2" />
+                {updateConfeitaria.isPending ? 'Salvando...' : 'Salvar Alterações'}
+              </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Formas de Pagamento */}
+        <TabsContent value="pagamentos" className="mt-6">
+          <Card className="border-0 shadow-lg shadow-gray-100/50">
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle>Formas de Pagamento</CardTitle>
+              <Button onClick={() => openItemForm('FormaPagamento')} className="bg-rose-500 hover:bg-rose-600">
+                <Plus className="w-4 h-4 mr-2" />
+                Nova Forma
+              </Button>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {formasPagamento.length === 0 ? (
+                <p className="text-center text-gray-500 py-8">Nenhuma forma de pagamento cadastrada</p>
+              ) : (
+                formasPagamento.map((item) => (
+                  <ItemCard key={item.id} item={item} icon={Store} />
+                ))
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Catálogo */}
+        <TabsContent value="catalogo" className="mt-6">
+          <Card className="border-0 shadow-lg shadow-gray-100/50">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <ExternalLink className="w-5 h-5 text-rose-500" />
+                Configurações do Catálogo Público
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div>
+                <h4 className="font-semibold text-gray-900 mb-4">URL do Catálogo</h4>
+                {confeitariaForm.slug && (() => {
+                  const catalogUrl = createCatalogUrl(confeitariaForm.slug);
+                  return (
+                    <div className="p-4 bg-rose-50 rounded-xl border border-rose-200">
+                      <p className="text-sm text-gray-600 mb-2">Link do seu catálogo:</p>
+                      <div className="flex items-center gap-2">
+                        <code className="flex-1 p-2 bg-white rounded border text-sm text-rose-600 truncate">
+                          {catalogUrl}
+                        </code>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => window.open(catalogUrl, '_blank')}
+                        >
+                          <ExternalLink className="w-4 h-4" />
+                        </Button>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-2">
+                        O slug foi definido no cadastro e não pode ser alterado
+                      </p>
+                    </div>
+                  );
+                })()}
+              </div>
+
+              <div className="pt-4 border-t">
+                <h4 className="font-semibold text-gray-900 mb-4">Identidade Visual</h4>
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div>
+                    <Label>Logo da Confeitaria</Label>
+                    <div className="mt-2 space-y-3">
+                      {confeitariaForm.logo_url ? (
+                        <div className="relative inline-block">
+                          <img
+                            src={confeitariaForm.logo_url}
+                            alt="Logo"
+                            className="h-24 w-24 object-cover rounded-full border-2 border-rose-200"
+                          />
+                          <button
+                            onClick={() => setConfeitariaForm({ ...confeitariaForm, logo_url: '' })}
+                            className="absolute -top-2 -right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="h-24 w-24 rounded-full border-2 border-dashed border-gray-300 flex items-center justify-center bg-gray-50">
+                          <Upload className="w-6 h-6 text-gray-400" />
+                        </div>
+                      )}
+                      <div>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleLogoUpload}
+                          className="hidden"
+                          id="logo-upload"
+                          disabled={uploadingLogo}
+                        />
+                        <label htmlFor="logo-upload">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            disabled={uploadingLogo}
+                            onClick={() => document.getElementById('logo-upload').click()}
+                          >
+                            <Upload className="w-4 h-4 mr-2" />
+                            {uploadingLogo ? 'Enviando...' : 'Escolher Imagem'}
+                          </Button>
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                  <div>
+                    <Label>Cor Principal</Label>
+                    <div className="flex gap-2 mt-2">
+                      <Input
+                        type="color"
+                        value={confeitariaForm.cor_principal || '#ec4899'}
+                        onChange={(e) => setConfeitariaForm({ ...confeitariaForm, cor_principal: e.target.value })}
+                        className="w-20 h-11"
+                      />
+                      <Input
+                        value={confeitariaForm.cor_principal || '#ec4899'}
+                        onChange={(e) => setConfeitariaForm({ ...confeitariaForm, cor_principal: e.target.value })}
+                        placeholder="#ec4899"
+                      />
+                    </div>
+                    <p className="text-xs text-gray-500 mt-2">
+                      Esta cor será usada nos botões e destaques do catálogo
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-4 border-t">
+                <h4 className="font-semibold text-gray-900 mb-4">Pedido Personalizado</h4>
+                <div className="space-y-4">
+                  <div className="flex items-start justify-between p-4 bg-gray-50 rounded-xl">
+                    <div className="flex-1">
+                      <Label className="text-base font-medium text-gray-900">
+                        Exibir pedido personalizado no catálogo
+                      </Label>
+                      <p className="text-sm text-gray-500 mt-1">
+                        Mostra a opção de montar bolo personalizado no catálogo público
+                      </p>
+                    </div>
+                    <Switch
+                      checked={confeitariaForm.exibir_pedido_personalizado}
+                      onCheckedChange={(checked) => setConfeitariaForm({ ...confeitariaForm, exibir_pedido_personalizado: checked })}
+                      className="ml-4"
+                    />
+                  </div>
+                  {confeitariaForm.exibir_pedido_personalizado && (
+                    <div>
+                      <Label>Frase do Pedido Personalizado</Label>
+                      <Input
+                        value={confeitariaForm.frase_pedido_personalizado}
+                        onChange={(e) => setConfeitariaForm({ ...confeitariaForm, frase_pedido_personalizado: e.target.value })}
+                        placeholder="Monte seu Bolo Personalizado"
+                      />
+                      <p className="text-xs text-gray-500 mt-2">
+                        Esta frase será exibida no botão de pedido personalizado no catálogo
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="pt-4 border-t">
+                <h4 className="font-semibold text-gray-900 mb-4">Notificações</h4>
+                <div className="flex items-start justify-between p-4 bg-gray-50 rounded-xl">
+                  <div className="flex-1">
+                    <Label className="text-base font-medium text-gray-900">
+                      Receber pedidos via WhatsApp
+                    </Label>
+                    <p className="text-sm text-gray-500 mt-1">
+                      Quando ativado, os clientes poderão enviar os detalhes do pedido diretamente para seu WhatsApp após finalizar no catálogo
+                    </p>
+                  </div>
+                  <Switch
+                    checked={confeitariaForm.receber_pedidos_whatsapp}
+                    onCheckedChange={(checked) => setConfeitariaForm({ ...confeitariaForm, receber_pedidos_whatsapp: checked })}
+                    className="ml-4"
+                  />
+                </div>
+                {confeitariaForm.receber_pedidos_whatsapp && !confeitariaForm.telefone && (
+                  <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-2">
+                    <div className="text-amber-600 text-sm">
+                      ⚠️ Configure seu telefone/WhatsApp na aba <strong>Geral</strong> para receber os pedidos
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <Button
+                onClick={() => updateConfeitaria.mutate()}
+                disabled={updateConfeitaria.isPending || !confeitaria?.id}
+                className="bg-rose-500 hover:bg-rose-600"
+              >
+                <Save className="w-4 h-4 mr-2" />
+                {updateConfeitaria.isPending ? 'Salvando...' : 'Salvar Configurações'}
+              </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Assinaturas */}
+        <TabsContent value="assinaturas" className="mt-6">
+          <AssinaturasTab
+            confeitaria={confeitaria}
+            onUpdate={async () => {
+              await refetchConfeitaria();
+              queryClient.invalidateQueries(['confeitaria']);
+            }}
+          />
+        </TabsContent>
+        </Tabs>
+
+      {/* Item Form Dialog */}
+      <Dialog open={showItemForm} onOpenChange={closeItemForm}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {editingItem ? 'Editar' : 'Nova'} Forma de Pagamento
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            {renderItemFormFields()}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={closeItemForm}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={() => saveItem.mutate({
+                type: itemType,
+                data: itemForm,
+                id: editingItem?.id,
+              })}
+              disabled={!itemForm.nome || ((itemType === 'doce' || itemType === 'salgado') && !itemForm.valor_unitario) || saveItem.isPending}
+              className="bg-rose-500 hover:bg-rose-600"
+            >
+              {saveItem.isPending ? 'Salvando...' : 'Salvar'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

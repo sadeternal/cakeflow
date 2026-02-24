@@ -1,0 +1,84 @@
+/**
+ * pages.config.js - Page routing configuration
+ * 
+ * This file is AUTO-GENERATED. Do not add imports or modify PAGES manually.
+ * Pages are auto-registered when you create files in the ./pages/ folder.
+ * 
+ * THE ONLY EDITABLE VALUE: mainPage
+ * This controls which page is the landing page (shown when users visit the app).
+ * 
+ * Example file structure:
+ * 
+ *   import HomePage from './pages/HomePage';
+ *   import Dashboard from './pages/Dashboard';
+ *   import Settings from './pages/Settings';
+ *   
+ *   export const PAGES = {
+ *       "HomePage": HomePage,
+ *       "Dashboard": Dashboard,
+ *       "Settings": Settings,
+ *   }
+ *   
+ *   export const pagesConfig = {
+ *       mainPage: "HomePage",
+ *       Pages: PAGES,
+ *   };
+ * 
+ * Example with Layout (wraps all pages):
+ *
+ *   import Home from './pages/Home';
+ *   import Settings from './pages/Settings';
+ *   import __Layout from './Layout.jsx';
+ *
+ *   export const PAGES = {
+ *       "Home": Home,
+ *       "Settings": Settings,
+ *   }
+ *
+ *   export const pagesConfig = {
+ *       mainPage: "Home",
+ *       Pages: PAGES,
+ *       Layout: __Layout,
+ *   };
+ *
+ * To change the main page from HomePage to Dashboard, use find_replace:
+ *   Old: mainPage: "HomePage",
+ *   New: mainPage: "Dashboard",
+ *
+ * The mainPage value must match a key in the PAGES object exactly.
+ */
+import Catalogo from './pages/Catalogo';
+import Clientes from './pages/Clientes';
+import Configuracoes from './pages/Configuracoes';
+import AjusteUsuario from './pages/AjusteUsuario';
+import Dashboard from './pages/Dashboard';
+import Financeiro from './pages/Financeiro';
+import NovoPedido from './pages/NovoPedido';
+import Onboarding from './pages/Onboarding';
+import Pedidos from './pages/Pedidos';
+import Produtos from './pages/Produtos';
+import Relatorios from './pages/Relatorios';
+import Suporte from './pages/Suporte';
+import __Layout from './Layout.jsx';
+
+
+export const PAGES = {
+    "AjusteUsuario": AjusteUsuario,
+    "Catalogo": Catalogo,
+    "Clientes": Clientes,
+    "Configuracoes": Configuracoes,
+    "Dashboard": Dashboard,
+    "Financeiro": Financeiro,
+    "NovoPedido": NovoPedido,
+    "Onboarding": Onboarding,
+    "Pedidos": Pedidos,
+    "Produtos": Produtos,
+    "Relatorios": Relatorios,
+    "Suporte": Suporte,
+}
+
+export const pagesConfig = {
+    mainPage: "Onboarding",
+    Pages: PAGES,
+    Layout: __Layout,
+};
