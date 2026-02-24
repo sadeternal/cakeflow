@@ -116,7 +116,9 @@ export default function AssinaturasTab({ confeitaria, onUpdate }) {
   const status = confeitaria?.status_assinatura || 'trial';
   const config = statusConfig[status] || statusConfig.trial;
   const StatusIcon = config.icon;
-  const canManageSubscription = Boolean(confeitaria?.stripe_customer_id) && status !== 'canceled';
+  const hasOngoingSubscription =
+    Boolean(confeitaria?.stripe_subscription_id) &&
+    ['active', 'canceling', 'past_due', 'incomplete', 'trial'].includes(status);
 
   const buildBillingReturnUrl = (action) => {
     const returnUrl = new URL(`${window.location.origin}/Configuracoes`);
@@ -227,7 +229,7 @@ export default function AssinaturasTab({ confeitaria, onUpdate }) {
     window.history.replaceState({}, '', nextUrl);
 
     if (billingAction === 'manage') {
-      if (canManageSubscription) {
+      if (hasOngoingSubscription) {
         handleManageSubscription();
       } else {
         handleStartSubscription();
@@ -236,7 +238,7 @@ export default function AssinaturasTab({ confeitaria, onUpdate }) {
     }
 
     handleStartSubscription();
-  }, [autoBillingActionProcessed, canManageSubscription, confeitaria?.id, loading]);
+  }, [autoBillingActionProcessed, hasOngoingSubscription, confeitaria?.id, loading]);
 
   if (!confeitaria) {
     return (
@@ -342,7 +344,7 @@ export default function AssinaturasTab({ confeitaria, onUpdate }) {
           </div>
 
           <div className="pt-4 border-t space-y-2">
-            {!canManageSubscription ? (
+            {!hasOngoingSubscription ? (
               <Button
                 onClick={handleStartSubscription}
                 disabled={loading}

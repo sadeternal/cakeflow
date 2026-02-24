@@ -13,7 +13,8 @@ import {
   getConfeitariaById,
   getSupabaseClients,
   requireEnv,
-  requireUserContext
+  requireUserContext,
+  updateConfeitariaById
 } from '../_shared/supabase.ts';
 
 serve(async (req) => {
@@ -42,13 +43,28 @@ serve(async (req) => {
 
     const { adminClient } = getSupabaseClients(req);
     const confeitaria = await getConfeitariaById(adminClient, confeitariaId);
-    if (!confeitaria.stripe_customer_id) {
+    let customerId = confeitaria.stripe_customer_id as string | null;
+
+    if (!customerId && confeitaria.stripe_subscription_id) {
+      const subscription = await stripe.subscriptions.retrieve(confeitaria.stripe_subscription_id);
+      const resolvedCustomerId =
+        typeof subscription.customer === 'string' ? subscription.customer : null;
+
+      if (resolvedCustomerId) {
+        customerId = resolvedCustomerId;
+        await updateConfeitariaById(adminClient, confeitaria.id, {
+          stripe_customer_id: customerId
+        });
+      }
+    }
+
+    if (!customerId) {
       throw new HttpError(400, 'Cliente Stripe não configurado');
     }
 
     const appUrl = getAppUrl(req);
     const session = await stripe.billingPortal.sessions.create({
-      customer: confeitaria.stripe_customer_id,
+      customer: customerId,
       return_url: `${appUrl}/Configuracoes?tab=assinaturas`
     });
 
