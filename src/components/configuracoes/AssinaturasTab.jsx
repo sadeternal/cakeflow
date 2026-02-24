@@ -7,6 +7,7 @@ import { CreditCard, Clock, CheckCircle2, AlertCircle, ExternalLink, Loader2 } f
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale/pt-BR';
 import { toast } from 'sonner';
+import { isAuthError } from '@/lib/isAuthError';
 
 export default function AssinaturasTab({ confeitaria, onUpdate }) {
   const [loading, setLoading] = useState(false);
@@ -114,10 +115,28 @@ export default function AssinaturasTab({ confeitaria, onUpdate }) {
   const status = confeitaria?.status_assinatura || 'trial';
   const config = statusConfig[status] || statusConfig.trial;
   const StatusIcon = config.icon;
+  const canManageSubscription = Boolean(confeitaria?.stripe_customer_id) && status !== 'canceled';
+
+  const ensureValidSession = async () => {
+    try {
+      await appClient.auth.me();
+      return true;
+    } catch (error) {
+      if (isAuthError(error)) {
+        toast.error('Sua sessão expirou. Faça login novamente.');
+        appClient.auth.redirectToLogin(window.location.href);
+        return false;
+      }
+      throw error;
+    }
+  };
 
   const handleStartSubscription = async () => {
     try {
       setLoading(true);
+      const sessionOk = await ensureValidSession();
+      if (!sessionOk) return;
+
       const response = await appClient.functions.invoke('createCheckoutSession', {
         confeitaria_id: confeitaria.id
       });
@@ -129,6 +148,10 @@ export default function AssinaturasTab({ confeitaria, onUpdate }) {
       }
     } catch (error) {
       console.error('❌ Erro ao iniciar assinatura:', error);
+      if (isAuthError(error)) {
+        appClient.auth.redirectToLogin(window.location.href);
+        return;
+      }
       alert(`Erro ao iniciar assinatura: ${error.message}`);
     } finally {
       setLoading(false);
@@ -159,6 +182,9 @@ export default function AssinaturasTab({ confeitaria, onUpdate }) {
   const handleManageSubscription = async () => {
     try {
       setLoading(true);
+      const sessionOk = await ensureValidSession();
+      if (!sessionOk) return;
+
       const response = await appClient.functions.invoke('createCustomerPortal', {
         confeitaria_id: confeitaria.id
       });
@@ -167,6 +193,10 @@ export default function AssinaturasTab({ confeitaria, onUpdate }) {
       }
     } catch (error) {
       console.error('❌ Erro ao abrir portal:', error);
+      if (isAuthError(error)) {
+        appClient.auth.redirectToLogin(window.location.href);
+        return;
+      }
       alert('Erro ao abrir portal. Tente novamente.');
     } finally {
       setLoading(false);
@@ -277,7 +307,7 @@ export default function AssinaturasTab({ confeitaria, onUpdate }) {
           </div>
 
           <div className="pt-4 border-t space-y-2">
-            {status === 'canceled' || !confeitaria?.stripe_subscription_id ? (
+            {!canManageSubscription ? (
               <Button
                 onClick={handleStartSubscription}
                 disabled={loading}
