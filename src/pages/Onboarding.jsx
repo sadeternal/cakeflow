@@ -10,10 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from '@/components/ui/use-toast';
 import CakeflowLogoIcon from '@/components/CakeflowLogoIcon';
 import {
-  AlertCircle,
   ArrowRight,
-  CheckCircle2,
-  CreditCard,
   MapPin,
   Phone,
   Share2,
@@ -22,42 +19,6 @@ import {
 } from 'lucide-react';
 import { createPageUrl } from '@/utils';
 import { isAuthError } from '@/lib/isAuthError';
-
-const PLANOS = [
-  {
-    id: 'mensal',
-    nome: 'Plano Completo',
-    preco: 'R$ 59,90/mês',
-    descricao: 'Teste grátis por 7 dias. Depois, cobrança automática no cartão cadastrado.',
-    beneficios: [
-      'Pedidos e produção',
-      'Catálogo online',
-      'Financeiro e relatórios',
-      'Suporte'
-    ]
-  }
-];
-
-const BILLING_READY_STATUSES = new Set(['trial', 'active', 'canceling', 'past_due', 'incomplete']);
-
-const hasPaymentSetup = (confeitaria) =>
-  Boolean(confeitaria?.stripe_subscription_id) &&
-  BILLING_READY_STATUSES.has(confeitaria?.status_assinatura || 'trial');
-
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-const clearCheckoutQueryParam = () => {
-  const params = new URLSearchParams(window.location.search);
-  if (!params.has('checkout')) return;
-  params.delete('checkout');
-  const nextUrl = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ''}`;
-  window.history.replaceState({}, document.title, nextUrl);
-};
-
-const fetchConfeitariaById = async (confeitariaId) => {
-  const list = await appClient.entities.Confeitaria.filter({ id: confeitariaId });
-  return list[0] || null;
-};
 
 export default function Onboarding() {
   const { toast } = useToast();
@@ -81,12 +42,7 @@ export default function Onboarding() {
 
   const [step, setStep] = useState(1);
   const [user, setUser] = useState(null);
-  const [confeitaria, setConfeitaria] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [isRedirectingCheckout, setIsRedirectingCheckout] = useState(false);
-  const [isCheckingPayment, setIsCheckingPayment] = useState(false);
-  const [selectedPlan, setSelectedPlan] = useState(PLANOS[0].id);
-  const [checkoutNotice, setCheckoutNotice] = useState('');
   const [formData, setFormData] = useState(() => {
     const prefill = getStoredPrefill();
     return (
@@ -100,49 +56,8 @@ export default function Onboarding() {
     );
   });
 
-  const confirmarPagamento = async (confeitariaId, options = {}) => {
-    const attempts = options.attempts || 8;
-    const delayMs = options.delayMs || 2000;
-
-    setIsCheckingPayment(true);
-    try {
-      let latest = null;
-
-      for (let attempt = 1; attempt <= attempts; attempt += 1) {
-        const current = await fetchConfeitariaById(confeitariaId);
-        latest = current;
-        setConfeitaria(current);
-
-        if (hasPaymentSetup(current)) {
-          clearCheckoutQueryParam();
-          window.location.href = createPageUrl('Dashboard');
-          return true;
-        }
-
-        if (attempt < attempts) {
-          await sleep(delayMs);
-        }
-      }
-
-      setCheckoutNotice(
-        'Pagamento recebido, mas ainda estamos aguardando confirmação final. Clique em "Já adicionei meu cartão" em alguns segundos.'
-      );
-      return false;
-    } catch (error) {
-      toast({
-        title: 'Erro ao confirmar pagamento',
-        description: error?.message || 'Não foi possível validar a assinatura agora.',
-        variant: 'destructive'
-      });
-      return false;
-    } finally {
-      setIsCheckingPayment(false);
-    }
-  };
-
   const checkUser = async () => {
     try {
-      const checkoutStatus = new URLSearchParams(window.location.search).get('checkout');
       const u = await appClient.auth.me();
       setUser(u);
 
@@ -151,25 +66,8 @@ export default function Onboarding() {
         return;
       }
 
-      const conf = await fetchConfeitariaById(u.confeitaria_id);
-      setConfeitaria(conf);
-
-      if (hasPaymentSetup(conf)) {
-        clearCheckoutQueryParam();
-        window.location.href = createPageUrl('Dashboard');
-        return;
-      }
-
-      setStep(3);
-
-      if (checkoutStatus === 'success') {
-        setCheckoutNotice('Confirmando seu pagamento...');
-        await confirmarPagamento(u.confeitaria_id, { attempts: 10, delayMs: 1500 });
-      } else if (checkoutStatus === 'canceled') {
-        setCheckoutNotice('Checkout cancelado. Para concluir o cadastro, selecione um plano e adicione o cartão.');
-      }
-
-      clearCheckoutQueryParam();
+      window.location.href = createPageUrl('Dashboard');
+      return;
     } catch (e) {
       if (isAuthError(e)) {
         appClient.auth.redirectToLogin(createPageUrl('Onboarding'));
@@ -228,9 +126,11 @@ export default function Onboarding() {
     },
     onSuccess: (createdConfeitaria) => {
       window.localStorage.removeItem('cakeflow_onboarding_prefill');
-      setConfeitaria(createdConfeitaria);
-      setStep(3);
-      setCheckoutNotice('Confeitaria criada com sucesso. Agora selecione seu plano e adicione a forma de pagamento.');
+      toast({
+        title: 'Cadastro concluído',
+        description: 'Seu trial gratuito de 7 dias começou. Você pode assinar depois em Configurações > Assinaturas.'
+      });
+      window.location.href = createPageUrl('Dashboard');
     },
     onError: (error) => {
       toast({
@@ -331,41 +231,6 @@ export default function Onboarding() {
         ativo: true
       }
     ]);
-  };
-
-  const handleIrParaPagamento = async () => {
-    if (!confeitaria?.id) {
-      toast({
-        title: 'Confeitaria não encontrada',
-        description: 'Finalize o cadastro da confeitaria antes de continuar.',
-        variant: 'destructive'
-      });
-      return;
-    }
-
-    try {
-      setIsRedirectingCheckout(true);
-      const response = await appClient.functions.invoke('createCheckoutSession', {
-        confeitaria_id: confeitaria.id,
-        plan: selectedPlan,
-        trial_days: 7,
-        success_path: '/Onboarding?checkout=success',
-        cancel_path: '/Onboarding?checkout=canceled'
-      });
-
-      if (!response?.data?.url) {
-        throw new Error('Não foi possível iniciar o checkout.');
-      }
-
-      window.location.href = response.data.url;
-    } catch (error) {
-      setIsRedirectingCheckout(false);
-      toast({
-        title: 'Erro ao iniciar pagamento',
-        description: error?.message || 'Não foi possível abrir o checkout.',
-        variant: 'destructive'
-      });
-    }
   };
 
   if (loading) {
@@ -515,86 +380,11 @@ export default function Onboarding() {
                     'Criando...'
                   ) : (
                     <>
-                      Continuar para Plano
+                      Finalizar cadastro
                       <ArrowRight className="w-4 h-4 ml-2" />
                     </>
                   )}
                 </Button>
-              </div>
-            )}
-
-            {step === 3 && (
-              <div className="space-y-5">
-                <div>
-                  <h2 className="text-xl font-bold text-gray-900 mb-1">Plano e forma de pagamento</h2>
-                  <p className="text-gray-500 text-sm">
-                    Escolha seu plano e adicione o cartão para iniciar o teste gratuito de 7 dias.
-                  </p>
-                </div>
-
-                {checkoutNotice && (
-                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 flex items-start gap-2">
-                    <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
-                    <span>{checkoutNotice}</span>
-                  </div>
-                )}
-
-                <div className="space-y-3">
-                  {PLANOS.map((plano) => (
-                    <button
-                      key={plano.id}
-                      type="button"
-                      onClick={() => setSelectedPlan(plano.id)}
-                      className={`w-full rounded-xl border p-4 text-left transition-all ${
-                        selectedPlan === plano.id
-                          ? 'border-rose-400 bg-rose-50 shadow-sm'
-                          : 'border-gray-200 bg-white hover:border-rose-200'
-                      }`}
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <h3 className="font-semibold text-gray-900">{plano.nome}</h3>
-                          <p className="text-sm text-gray-600 mt-0.5">{plano.descricao}</p>
-                        </div>
-                        <span className="text-sm font-bold text-rose-600">{plano.preco}</span>
-                      </div>
-                      <div className="mt-3 space-y-1.5">
-                        {plano.beneficios.map((beneficio) => (
-                          <div key={beneficio} className="flex items-center gap-2 text-sm text-gray-700">
-                            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                            <span>{beneficio}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </button>
-                  ))}
-                </div>
-
-                <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
-                  Seu cartão será validado no checkout e a primeira cobrança ocorrerá automaticamente após 7 dias,
-                  caso a assinatura permaneça ativa.
-                </div>
-
-                <div className="space-y-2">
-                  <Button
-                    onClick={handleIrParaPagamento}
-                    disabled={isRedirectingCheckout || isCheckingPayment}
-                    className="w-full h-12 bg-gradient-to-r from-rose-500 to-rose-600 hover:from-rose-600 hover:to-rose-700 text-white shadow-lg shadow-rose-200"
-                  >
-                    <CreditCard className="w-4 h-4 mr-2" />
-                    {isRedirectingCheckout ? 'Abrindo checkout...' : 'Adicionar forma de pagamento'}
-                  </Button>
-
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => confirmarPagamento(confeitaria?.id)}
-                    disabled={isRedirectingCheckout || isCheckingPayment || !confeitaria?.id}
-                    className="w-full"
-                  >
-                    {isCheckingPayment ? 'Verificando pagamento...' : 'Já adicionei meu cartão'}
-                  </Button>
-                </div>
               </div>
             )}
           </CardContent>

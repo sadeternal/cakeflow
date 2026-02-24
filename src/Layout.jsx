@@ -47,7 +47,6 @@ const PAGE_TITLE_BY_ROUTE = {
 export default function Layout({ children, currentPageName }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { user } = useAuth();
-  const [subscriptionStatus, setSubscriptionStatus] = useState(null);
   const [showTrialExpired, setShowTrialExpired] = useState(false);
   const isPublicPage =
     currentPageName === 'Onboarding' ||
@@ -71,8 +70,6 @@ export default function Layout({ children, currentPageName }) {
     const loadSubscription = async () => {
       try {
         const response = await appClient.functions.invoke('checkSubscriptionStatus');
-        setSubscriptionStatus(response.data);
-
         if (response.data && response.data.status === 'trial_expired') {
           setShowTrialExpired(true);
         }
@@ -92,18 +89,6 @@ export default function Layout({ children, currentPageName }) {
     },
     enabled: !isPublicPage && !!user?.confeitaria_id
   });
-
-  useEffect(() => {
-    if (isPublicPage || !user || !confeitaria) return;
-
-    const needsOnboardingPayment =
-      (confeitaria.status_assinatura === 'trial' || !confeitaria.status_assinatura) &&
-      !confeitaria.stripe_subscription_id;
-
-    if (needsOnboardingPayment && currentPageName !== 'Onboarding') {
-      window.location.href = createPageUrl('Onboarding');
-    }
-  }, [isPublicPage, user, confeitaria, currentPageName]);
 
   // Páginas públicas sem layout
   if (isPublicPage) {
@@ -126,18 +111,8 @@ export default function Layout({ children, currentPageName }) {
     appClient.auth.logout(`${window.location.origin}/auth`);
   };
 
-  const handleSubscribe = async () => {
-    try {
-      const response = await appClient.functions.invoke('createCheckoutSession', {
-        confeitaria_id: user.confeitaria_id
-      });
-      if (response?.data?.url) {
-        window.location.href = response.data.url;
-      }
-    } catch (error) {
-      console.error('Erro ao iniciar assinatura:', error);
-      alert('Erro ao iniciar assinatura. Tente novamente.');
-    }
+  const handleSubscribe = () => {
+    window.location.href = `${createPageUrl('Configuracoes')}?tab=assinaturas`;
   };
 
   // Se trial expirou, mostrar modal

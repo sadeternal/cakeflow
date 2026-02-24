@@ -1,5 +1,5 @@
 import React from 'react';
-import { AlertCircle, CreditCard } from 'lucide-react';
+import { AlertCircle, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
@@ -28,8 +28,8 @@ export default function TrialExpiredModal({ onSubscribe, onLogout }) {
               onClick={onSubscribe}
               className="w-full bg-gradient-to-r from-rose-500 to-rose-600 h-11"
             >
-              <CreditCard className="w-4 h-4 mr-2" />
-              Contratar Plano (R$ 59,90/mês)
+              <Settings className="w-4 h-4 mr-2" />
+              Ir para Assinaturas
             </Button>
             <Button
               onClick={onLogout}
