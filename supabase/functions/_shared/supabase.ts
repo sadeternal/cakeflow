@@ -29,9 +29,25 @@ export const getAppUrl = (req: Request) => {
 };
 
 export const getSupabaseClients = (req: Request) => {
-  const supabaseUrl = requireEnv('SUPABASE_URL');
-  const supabaseAnonKey = requireEnv('SUPABASE_ANON_KEY');
+  const requestOrigin = (() => {
+    try {
+      return new URL(req.url).origin;
+    } catch {
+      return null;
+    }
+  })();
+
+  const supabaseUrl = requestOrigin || requireEnv('SUPABASE_URL');
+  const supabaseAnonKey =
+    req.headers.get('apikey') ||
+    req.headers.get('x-api-key') ||
+    Deno.env.get('SUPABASE_ANON_KEY') ||
+    '';
   const serviceRoleKey = requireEnv('SUPABASE_SERVICE_ROLE_KEY');
+
+  if (!supabaseAnonKey) {
+    throw missingEnvError('SUPABASE_ANON_KEY');
+  }
 
   const authHeader = req.headers.get('Authorization') || '';
   const userClient = createClient(supabaseUrl, supabaseAnonKey, {
