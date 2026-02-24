@@ -253,6 +253,13 @@ const safeJson = async (response) => {
   }
 };
 
+const isInvalidJwtMessage = (payload, message) => {
+  const serializedPayload =
+    typeof payload === 'string' ? payload : JSON.stringify(payload || {});
+  const text = String(message || '');
+  return /invalid\s*jw?t|jwt/i.test(text) || /invalid\s*jw?t|jwt/i.test(serializedPayload);
+};
+
 const ensureOk = async (response) => {
   if (response.ok) return;
   const payload = await safeJson(response);
@@ -262,6 +269,14 @@ const ensureOk = async (response) => {
     payload?.error_description ||
     payload?.error ||
     `HTTP ${response.status}`;
+
+  if (response.status === 401 && isInvalidJwtMessage(payload, message)) {
+    clearStoredSession();
+    const authError = new Error('Sessão expirada. Faça login novamente.');
+    authError.status = 401;
+    authError.payload = payload;
+    throw authError;
+  }
 
   const err = new Error(message);
   err.status = response.status;
@@ -341,7 +356,18 @@ const ensureValidAccessToken = async () => {
   if (!shouldRefresh) return token;
 
   const refreshed = await refreshSession();
-  return refreshed || getStoredAccessToken();
+  if (refreshed) return refreshed;
+
+  const fallbackToken = getStoredAccessToken();
+  const fallbackExp = getTokenExpiry(fallbackToken);
+  const isFallbackExpired = fallbackExp > 0 && fallbackExp <= now;
+
+  if (isFallbackExpired || !fallbackToken) {
+    clearStoredSession();
+    return null;
+  }
+
+  return fallbackToken;
 };
 
 const buildAuthHeaders = async (extra = {}) => {
