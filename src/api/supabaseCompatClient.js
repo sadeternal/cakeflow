@@ -453,11 +453,41 @@ const requestRest = async ({ table, method = 'GET', query = '', body = null, pre
 };
 
 const requestFunction = async (name, payload) => {
+  const getFunctionHeaders = async () => {
+    let token = await ensureValidAccessToken();
+    if (!token) {
+      const err = new Error('Sessão expirada. Faça login novamente.');
+      err.status = 401;
+      throw err;
+    }
+
+    try {
+      await validateAccessTokenWithAuthApi(token);
+    } catch (error) {
+      if (Number(error?.status) !== 401) throw error;
+
+      const refreshed = await refreshSession();
+      if (!refreshed) {
+        clearStoredSession();
+        const err = new Error('Sessão expirada. Faça login novamente.');
+        err.status = 401;
+        throw err;
+      }
+
+      token = refreshed;
+      await validateAccessTokenWithAuthApi(token);
+    }
+
+    return {
+      apikey: supabaseAnonKey || '',
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`
+    };
+  };
+
   let response = await fetch(`${supabaseUrl}/functions/v1/${name}`, {
     method: 'POST',
-    headers: await buildAuthHeaders({
-      'Content-Type': 'application/json'
-    }),
+    headers: await getFunctionHeaders(),
     body: JSON.stringify(payload || {})
   });
 
@@ -466,9 +496,7 @@ const requestFunction = async (name, payload) => {
     if (refreshed) {
       response = await fetch(`${supabaseUrl}/functions/v1/${name}`, {
         method: 'POST',
-        headers: await buildAuthHeaders({
-          'Content-Type': 'application/json'
-        }),
+        headers: await getFunctionHeaders(),
         body: JSON.stringify(payload || {})
       });
     }

@@ -84,10 +84,29 @@ serve(async (req) => {
       : 0;
 
     let customerId = confeitaria.stripe_customer_id as string | null;
+    let subscriptionId = confeitaria.stripe_subscription_id as string | null;
 
-    if (hasOngoingSubscription && confeitaria.stripe_subscription_id) {
+    // Reintegração robusta: se houver customer no Stripe com assinatura em andamento,
+    // preferimos abrir o portal ao invés de criar checkout duplicado.
+    if (!hasOngoingSubscription && customerId) {
+      const subscriptions = await stripe.subscriptions.list({
+        customer: customerId,
+        status: 'all',
+        limit: 20
+      });
+
+      const ongoingStripeSubscription = subscriptions.data.find((subscription) =>
+        ['trialing', 'active', 'past_due', 'incomplete', 'unpaid'].includes(subscription.status)
+      );
+
+      if (ongoingStripeSubscription) {
+        subscriptionId = ongoingStripeSubscription.id;
+      }
+    }
+
+    if ((hasOngoingSubscription && subscriptionId) || (!hasOngoingSubscription && subscriptionId)) {
       if (!customerId) {
-        const subscription = await stripe.subscriptions.retrieve(confeitaria.stripe_subscription_id);
+        const subscription = await stripe.subscriptions.retrieve(subscriptionId as string);
         const resolvedCustomerId =
           typeof subscription.customer === 'string' ? subscription.customer : null;
 
@@ -97,6 +116,12 @@ serve(async (req) => {
             stripe_customer_id: customerId
           });
         }
+      }
+
+      if (subscriptionId !== confeitaria.stripe_subscription_id) {
+        await updateConfeitariaById(adminClient, confeitaria.id, {
+          stripe_subscription_id: subscriptionId
+        });
       }
 
       if (!customerId) {
