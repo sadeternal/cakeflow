@@ -166,6 +166,22 @@ const decodeJwtPayload = (token) => {
   }
 };
 
+const isTokenFromCurrentProject = (token) => {
+  if (!isJwtLike(token)) return false;
+
+  const payload = decodeJwtPayload(token);
+  const issuer = payload?.iss;
+  if (typeof issuer !== 'string' || !issuer) return true;
+
+  try {
+    const issuerHost = new URL(issuer).hostname;
+    const projectHost = new URL(supabaseUrl).hostname;
+    return issuerHost === projectHost;
+  } catch {
+    return true;
+  }
+};
+
 const setStoredSession = (payload) => {
   const key = getProjectStorageKey();
   if (!key || !payload) return;
@@ -214,14 +230,14 @@ const readSessionToken = (session, tokenKey) => {
 
 const getStoredAccessToken = () => {
   try {
-    const fromCustomStorage = window.localStorage.getItem('supabase_access_token');
-    if (isJwtLike(fromCustomStorage)) {
-      return fromCustomStorage;
-    }
-
     const session = getStoredSession();
     const fromSession = readSessionToken(session, 'access_token');
-    if (isJwtLike(fromSession)) return fromSession;
+    if (isJwtLike(fromSession) && isTokenFromCurrentProject(fromSession)) return fromSession;
+
+    const fromCustomStorage = window.localStorage.getItem('supabase_access_token');
+    if (isJwtLike(fromCustomStorage) && isTokenFromCurrentProject(fromCustomStorage)) {
+      return fromCustomStorage;
+    }
 
     return null;
   } catch {
@@ -353,6 +369,30 @@ const ensureValidAccessToken = async () => {
   }
 
   return fallbackToken;
+};
+
+const validateAccessTokenWithAuthApi = async (token) => {
+  const response = await fetch(`${supabaseUrl}/auth/v1/user`, {
+    method: 'GET',
+    headers: {
+      apikey: supabaseAnonKey || '',
+      Authorization: `Bearer ${token}`
+    }
+  });
+
+  if (response.ok) {
+    return safeJson(response);
+  }
+
+  if (response.status === 401 || response.status === 403) {
+    const err = new Error('Unauthorized');
+    err.status = 401;
+    err.payload = await safeJson(response);
+    throw err;
+  }
+
+  await ensureOk(response);
+  return null;
 };
 
 const buildAuthHeaders = async (extra = {}) => {
@@ -713,16 +753,32 @@ const authApi = {
   },
 
   async me() {
-    const accessToken = await ensureValidAccessToken();
-    const tokenPayload = decodeJwtPayload(accessToken);
-    const userId = tokenPayload?.sub;
-    if (!userId) throw new Error('Unauthorized');
+    let accessToken = await ensureValidAccessToken();
+    if (!accessToken) throw new Error('Unauthorized');
 
+    let authUser = null;
+    try {
+      authUser = await validateAccessTokenWithAuthApi(accessToken);
+    } catch (error) {
+      if (Number(error?.status) !== 401) throw error;
+
+      const refreshed = await refreshSession();
+      if (!refreshed) {
+        clearStoredSession();
+        throw error;
+      }
+
+      accessToken = refreshed;
+      authUser = await validateAccessTokenWithAuthApi(accessToken);
+    }
+
+    const tokenPayload = decodeJwtPayload(accessToken);
     const user = {
-      id: userId,
-      email: tokenPayload?.email || null,
-      user_metadata: tokenPayload?.user_metadata || {}
+      id: String(authUser?.id || tokenPayload?.sub || ''),
+      email: authUser?.email || tokenPayload?.email || null,
+      user_metadata: authUser?.user_metadata || tokenPayload?.user_metadata || {}
     };
+    if (!user.id) throw new Error('Unauthorized');
 
     let profile = null;
     try {
