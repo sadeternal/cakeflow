@@ -3,16 +3,14 @@ import { appClient } from '@/api/appClient';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { CreditCard, Clock, CheckCircle2, AlertCircle, ExternalLink, Loader2 } from 'lucide-react';
+import { CreditCard, Clock, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale/pt-BR';
 import { toast } from 'sonner';
-import { isAuthError } from '@/lib/isAuthError';
 
 export default function AssinaturasTab({ confeitaria, onUpdate }) {
   const [loading, setLoading] = useState(false);
   const [checkoutProcessed, setCheckoutProcessed] = useState(false);
-  const [autoBillingActionProcessed, setAutoBillingActionProcessed] = useState(false);
 
   useEffect(() => {
     const handleCheckoutSuccess = async () => {
@@ -120,34 +118,15 @@ export default function AssinaturasTab({ confeitaria, onUpdate }) {
     Boolean(confeitaria?.stripe_subscription_id) &&
     ['active', 'canceling', 'past_due', 'incomplete', 'trial'].includes(status);
 
-  const buildBillingReturnUrl = (action) => {
+  const buildBillingReturnUrl = () => {
     const returnUrl = new URL(`${window.location.origin}/Configuracoes`);
     returnUrl.searchParams.set('tab', 'assinaturas');
-    if (action) {
-      returnUrl.searchParams.set('billing_action', action);
-    }
     return returnUrl.toString();
   };
 
-  const ensureValidSession = async (action) => {
-    try {
-      await appClient.auth.me();
-      return true;
-    } catch (error) {
-      if (isAuthError(error)) {
-        toast.error('Sua sessão expirou. Faça login novamente.');
-        appClient.auth.redirectToLogin(buildBillingReturnUrl(action));
-        return false;
-      }
-      throw error;
-    }
-  };
-
-  const handleStartSubscription = async () => {
+  const handleOpenBilling = async () => {
     try {
       setLoading(true);
-      const sessionOk = await ensureValidSession('subscribe');
-      if (!sessionOk) return;
 
       const response = await appClient.functions.invoke('createCheckoutSession', {
         confeitaria_id: confeitaria.id
@@ -156,15 +135,15 @@ export default function AssinaturasTab({ confeitaria, onUpdate }) {
       if (response?.data?.url) {
         window.location.href = response.data.url;
       } else {
-        throw new Error('URL do checkout não retornada');
+        throw new Error('URL de cobrança não retornada');
       }
     } catch (error) {
-      console.error('❌ Erro ao iniciar assinatura:', error);
-      if (isAuthError(error)) {
-        appClient.auth.redirectToLogin(buildBillingReturnUrl('subscribe'));
+      console.error('❌ Erro ao abrir cobrança:', error);
+      if (Number(error?.status) === 401 || /unauthorized|invalid jwt/i.test(String(error?.message || ''))) {
+        appClient.auth.redirectToLogin(buildBillingReturnUrl());
         return;
       }
-      alert(`Erro ao iniciar assinatura: ${error.message}`);
+      alert(`Erro ao abrir cobrança: ${error.message}`);
     } finally {
       setLoading(false);
     }
@@ -190,55 +169,6 @@ export default function AssinaturasTab({ confeitaria, onUpdate }) {
       setLoading(false);
     }
   };
-
-  const handleManageSubscription = async () => {
-    try {
-      setLoading(true);
-      const sessionOk = await ensureValidSession('manage');
-      if (!sessionOk) return;
-
-      const response = await appClient.functions.invoke('createCustomerPortal', {
-        confeitaria_id: confeitaria.id
-      });
-      if (response?.data?.url) {
-        window.location.href = response.data.url;
-      }
-    } catch (error) {
-      console.error('❌ Erro ao abrir portal:', error);
-      if (isAuthError(error)) {
-        appClient.auth.redirectToLogin(buildBillingReturnUrl('manage'));
-        return;
-      }
-      alert('Erro ao abrir portal. Tente novamente.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (!confeitaria?.id || autoBillingActionProcessed || loading) return;
-
-    const params = new URLSearchParams(window.location.search);
-    const billingAction = params.get('billing_action');
-    if (!billingAction) return;
-    if (billingAction !== 'subscribe' && billingAction !== 'manage') return;
-
-    setAutoBillingActionProcessed(true);
-    params.delete('billing_action');
-    const nextUrl = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ''}`;
-    window.history.replaceState({}, '', nextUrl);
-
-    if (billingAction === 'manage') {
-      if (hasOngoingSubscription) {
-        handleManageSubscription();
-      } else {
-        handleStartSubscription();
-      }
-      return;
-    }
-
-    handleStartSubscription();
-  }, [autoBillingActionProcessed, hasOngoingSubscription, confeitaria?.id, loading]);
 
   if (!confeitaria) {
     return (
@@ -344,37 +274,29 @@ export default function AssinaturasTab({ confeitaria, onUpdate }) {
           </div>
 
           <div className="pt-4 border-t space-y-2">
-            {!hasOngoingSubscription ? (
+            <Button
+              onClick={handleOpenBilling}
+              disabled={loading}
+              className="w-full bg-gradient-to-r from-rose-500 to-rose-600"
+            >
+              {loading
+                ? 'Processando...'
+                : hasOngoingSubscription
+                  ? 'Gerenciar Assinatura'
+                  : status === 'canceled'
+                    ? 'Assinar Novamente'
+                    : 'Assinar o Plano'}
+            </Button>
+            {hasOngoingSubscription && !confeitaria?.data_proximo_pagamento && (
               <Button
-                onClick={handleStartSubscription}
+                onClick={handleSyncSubscription}
                 disabled={loading}
-                className="w-full bg-gradient-to-r from-rose-500 to-rose-600"
+                variant="ghost"
+                size="sm"
+                className="w-full text-xs"
               >
-                {loading ? 'Processando...' : status === 'canceled' ? 'Assinar Novamente' : 'Assinar o Plano'}
+                {loading ? 'Sincronizando...' : 'Sincronizar dados da assinatura'}
               </Button>
-            ) : (
-              <>
-                <Button
-                  onClick={handleManageSubscription}
-                  disabled={loading}
-                  variant="outline"
-                  className="w-full"
-                >
-                  <ExternalLink className="w-4 h-4 mr-2" />
-                  {loading ? 'Processando...' : 'Gerenciar Assinatura'}
-                </Button>
-                {!confeitaria?.data_proximo_pagamento && (
-                  <Button
-                    onClick={handleSyncSubscription}
-                    disabled={loading}
-                    variant="ghost"
-                    size="sm"
-                    className="w-full text-xs"
-                  >
-                    {loading ? 'Sincronizando...' : 'Sincronizar dados da assinatura'}
-                  </Button>
-                )}
-              </>
             )}
           </div>
         </CardContent>

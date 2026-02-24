@@ -29,15 +29,7 @@ export const getAppUrl = (req: Request) => {
 };
 
 export const getSupabaseClients = (req: Request) => {
-  const requestOrigin = (() => {
-    try {
-      return new URL(req.url).origin;
-    } catch {
-      return null;
-    }
-  })();
-
-  const supabaseUrl = requestOrigin || requireEnv('SUPABASE_URL');
+  const supabaseUrl = requireEnv('SUPABASE_URL');
   const supabaseAnonKey =
     req.headers.get('apikey') ||
     req.headers.get('x-api-key') ||

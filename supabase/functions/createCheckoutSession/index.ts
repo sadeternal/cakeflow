@@ -70,12 +70,9 @@ serve(async (req) => {
     const confeitaria = await getConfeitariaById(adminClient, confeitariaId);
 
     const status = confeitaria.status_assinatura;
-    const hasActiveSubscription =
-      !!confeitaria.stripe_subscription_id && (status === 'active' || status === 'canceling');
-
-    if (hasActiveSubscription) {
-      throw new HttpError(409, 'Assinatura já ativa ou em andamento');
-    }
+    const hasOngoingSubscription =
+      Boolean(confeitaria.stripe_subscription_id) &&
+      ['active', 'canceling', 'past_due', 'incomplete', 'trial'].includes(String(status));
 
     const stripePriceId =
       requestedPlan === 'anual'
@@ -87,6 +84,35 @@ serve(async (req) => {
       : 0;
 
     let customerId = confeitaria.stripe_customer_id as string | null;
+
+    if (hasOngoingSubscription && confeitaria.stripe_subscription_id) {
+      if (!customerId) {
+        const subscription = await stripe.subscriptions.retrieve(confeitaria.stripe_subscription_id);
+        const resolvedCustomerId =
+          typeof subscription.customer === 'string' ? subscription.customer : null;
+
+        if (resolvedCustomerId) {
+          customerId = resolvedCustomerId;
+          await updateConfeitariaById(adminClient, confeitaria.id, {
+            stripe_customer_id: customerId
+          });
+        }
+      }
+
+      if (!customerId) {
+        throw new HttpError(400, 'Cliente Stripe não configurado');
+      }
+
+      const portal = await stripe.billingPortal.sessions.create({
+        customer: customerId,
+        return_url: `${appUrl}/Configuracoes?tab=assinaturas`
+      });
+
+      return jsonResponse({
+        url: portal.url,
+        mode: 'portal'
+      });
+    }
 
     if (!customerId) {
       const customer = await stripe.customers.create({
@@ -123,7 +149,8 @@ serve(async (req) => {
 
     return jsonResponse({
       url: session.url,
-      sessionId: session.id
+      sessionId: session.id,
+      mode: 'checkout'
     });
   } catch (error) {
     console.error('❌ [createCheckoutSession] Erro:', error);
