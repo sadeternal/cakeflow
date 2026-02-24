@@ -60,6 +60,31 @@ const toAbsoluteInternalUrl = (target) => {
   }
 };
 
+const getSafeAuthCallbackUrl = () => {
+  if (typeof window === 'undefined') {
+    return supabaseAuthRedirectUrl || '';
+  }
+
+  const fallback = `${window.location.origin}/auth/callback`;
+
+  if (!supabaseAuthRedirectUrl) return fallback;
+
+  try {
+    const resolved = new URL(supabaseAuthRedirectUrl, window.location.origin);
+    const isLocalHost = ['localhost', '127.0.0.1'].includes(resolved.hostname);
+    const runningInLocalHost = ['localhost', '127.0.0.1'].includes(window.location.hostname);
+
+    // Evita callback para localhost quando o app roda em domínio publicado.
+    if (!runningInLocalHost && isLocalHost) return fallback;
+
+    if (resolved.origin !== window.location.origin && isLocalHost) return fallback;
+
+    return resolved.toString();
+  } catch {
+    return fallback;
+  }
+};
+
 const ENTITY_TABLE_MAP = {
   Confeitaria: 'confeitarias',
   Cliente: 'clientes',
@@ -812,8 +837,7 @@ const authApi = {
 
   signInWithGoogle(returnTo) {
     const redirect = toAbsoluteInternalUrl(returnTo);
-    const authCallback = supabaseAuthRedirectUrl || `${window.location.origin}/auth/callback`;
-    const callbackUrl = new URL(authCallback);
+    const callbackUrl = new URL(getSafeAuthCallbackUrl());
     callbackUrl.searchParams.set('redirect', redirect);
 
     const authorizeUrl = new URL(`${supabaseUrl}/auth/v1/authorize`);
