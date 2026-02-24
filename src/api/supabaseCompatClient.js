@@ -951,22 +951,27 @@ const authApi = {
     window.location.href = authorizeUrl.toString();
   },
 
-  redirectToLogin(returnTo) {
+  redirectToLogin(returnTo, options = {}) {
     if (typeof window === 'undefined') return;
+    const shouldForce = options?.force === true;
 
     const redirect = toAbsoluteInternalUrl(returnTo);
     const authPath = new URL(`${window.location.origin}/auth`);
     authPath.searchParams.set('redirect', redirect);
     authPath.searchParams.set('mode', 'login');
-    authPath.searchParams.set('force', '1');
+    if (shouldForce) {
+      authPath.searchParams.set('force', '1');
+    }
 
     const currentUrl = new URL(window.location.href);
     const currentRedirect = new URLSearchParams(currentUrl.search).get('redirect') || '';
     const currentMode = new URLSearchParams(currentUrl.search).get('mode') || '';
+    const currentForce = new URLSearchParams(currentUrl.search).get('force') || '';
     const isSameAuthRoute =
       currentUrl.pathname === '/auth' &&
       currentMode === 'login' &&
-      currentRedirect === redirect;
+      currentRedirect === redirect &&
+      (shouldForce ? currentForce === '1' : currentForce !== '1');
     if (isSameAuthRoute) return;
 
     // Evita loop de redirecionamento em sequência quando múltiplos componentes disparam auth_required.
