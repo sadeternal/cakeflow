@@ -12,6 +12,7 @@ import { isAuthError } from '@/lib/isAuthError';
 export default function AssinaturasTab({ confeitaria, onUpdate }) {
   const [loading, setLoading] = useState(false);
   const [checkoutProcessed, setCheckoutProcessed] = useState(false);
+  const [autoBillingActionProcessed, setAutoBillingActionProcessed] = useState(false);
 
   useEffect(() => {
     const handleCheckoutSuccess = async () => {
@@ -117,14 +118,23 @@ export default function AssinaturasTab({ confeitaria, onUpdate }) {
   const StatusIcon = config.icon;
   const canManageSubscription = Boolean(confeitaria?.stripe_customer_id) && status !== 'canceled';
 
-  const ensureValidSession = async () => {
+  const buildBillingReturnUrl = (action) => {
+    const returnUrl = new URL(`${window.location.origin}/Configuracoes`);
+    returnUrl.searchParams.set('tab', 'assinaturas');
+    if (action) {
+      returnUrl.searchParams.set('billing_action', action);
+    }
+    return returnUrl.toString();
+  };
+
+  const ensureValidSession = async (action) => {
     try {
       await appClient.auth.me();
       return true;
     } catch (error) {
       if (isAuthError(error)) {
         toast.error('Sua sessão expirou. Faça login novamente.');
-        appClient.auth.redirectToLogin(window.location.href);
+        appClient.auth.redirectToLogin(buildBillingReturnUrl(action));
         return false;
       }
       throw error;
@@ -134,7 +144,7 @@ export default function AssinaturasTab({ confeitaria, onUpdate }) {
   const handleStartSubscription = async () => {
     try {
       setLoading(true);
-      const sessionOk = await ensureValidSession();
+      const sessionOk = await ensureValidSession('subscribe');
       if (!sessionOk) return;
 
       const response = await appClient.functions.invoke('createCheckoutSession', {
@@ -149,7 +159,7 @@ export default function AssinaturasTab({ confeitaria, onUpdate }) {
     } catch (error) {
       console.error('❌ Erro ao iniciar assinatura:', error);
       if (isAuthError(error)) {
-        appClient.auth.redirectToLogin(window.location.href);
+        appClient.auth.redirectToLogin(buildBillingReturnUrl('subscribe'));
         return;
       }
       alert(`Erro ao iniciar assinatura: ${error.message}`);
@@ -182,7 +192,7 @@ export default function AssinaturasTab({ confeitaria, onUpdate }) {
   const handleManageSubscription = async () => {
     try {
       setLoading(true);
-      const sessionOk = await ensureValidSession();
+      const sessionOk = await ensureValidSession('manage');
       if (!sessionOk) return;
 
       const response = await appClient.functions.invoke('createCustomerPortal', {
@@ -194,7 +204,7 @@ export default function AssinaturasTab({ confeitaria, onUpdate }) {
     } catch (error) {
       console.error('❌ Erro ao abrir portal:', error);
       if (isAuthError(error)) {
-        appClient.auth.redirectToLogin(window.location.href);
+        appClient.auth.redirectToLogin(buildBillingReturnUrl('manage'));
         return;
       }
       alert('Erro ao abrir portal. Tente novamente.');
@@ -202,6 +212,31 @@ export default function AssinaturasTab({ confeitaria, onUpdate }) {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!confeitaria?.id || autoBillingActionProcessed || loading) return;
+
+    const params = new URLSearchParams(window.location.search);
+    const billingAction = params.get('billing_action');
+    if (!billingAction) return;
+    if (billingAction !== 'subscribe' && billingAction !== 'manage') return;
+
+    setAutoBillingActionProcessed(true);
+    params.delete('billing_action');
+    const nextUrl = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ''}`;
+    window.history.replaceState({}, '', nextUrl);
+
+    if (billingAction === 'manage') {
+      if (canManageSubscription) {
+        handleManageSubscription();
+      } else {
+        handleStartSubscription();
+      }
+      return;
+    }
+
+    handleStartSubscription();
+  }, [autoBillingActionProcessed, canManageSubscription, confeitaria?.id, loading]);
 
   if (!confeitaria) {
     return (
