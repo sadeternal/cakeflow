@@ -4,7 +4,6 @@ import { createPageUrl } from './utils';
 import { appClient } from '@/api/appClient';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/lib/AuthContext';
-import { isAuthError } from '@/lib/isAuthError';
 import CakeflowLogoIcon from '@/components/CakeflowLogoIcon';
 import {
   LayoutDashboard,
@@ -75,10 +74,6 @@ export default function Layout({ children, currentPageName }) {
           setShowTrialExpired(true);
         }
       } catch (e) {
-        if (isAuthError(e)) {
-          appClient.auth.redirectToLogin(window.location.href);
-          return;
-        }
         console.error('Erro ao verificar assinatura:', e);
       }
     };

@@ -915,10 +915,34 @@ const authApi = {
   },
 
   redirectToLogin(returnTo) {
+    if (typeof window === 'undefined') return;
+
     const redirect = toAbsoluteInternalUrl(returnTo);
     const authPath = new URL(`${window.location.origin}/auth`);
     authPath.searchParams.set('redirect', redirect);
     authPath.searchParams.set('mode', 'login');
+    authPath.searchParams.set('force', '1');
+
+    const currentUrl = new URL(window.location.href);
+    const currentRedirect = new URLSearchParams(currentUrl.search).get('redirect') || '';
+    const currentMode = new URLSearchParams(currentUrl.search).get('mode') || '';
+    const isSameAuthRoute =
+      currentUrl.pathname === '/auth' &&
+      currentMode === 'login' &&
+      currentRedirect === redirect;
+    if (isSameAuthRoute) return;
+
+    // Evita loop de redirecionamento em sequência quando múltiplos componentes disparam auth_required.
+    try {
+      const key = 'cakeflow_auth_redirect_ts';
+      const now = Date.now();
+      const last = Number(window.sessionStorage.getItem(key) || 0);
+      if (now - last < 1200) return;
+      window.sessionStorage.setItem(key, String(now));
+    } catch {
+      // noop
+    }
+
     window.location.href = authPath.toString();
   }
 };
