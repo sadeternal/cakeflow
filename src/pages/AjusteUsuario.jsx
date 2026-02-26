@@ -178,7 +178,7 @@ export default function AjusteUsuario() {
 
     setIsDeletingAccount(true);
     try {
-      await appClient.functions.invokeRpc('delete_my_account', {});
+      await appClient.functions.invoke('deleteAccount', {});
       toast({
         title: 'Conta excluída',
         description: 'Sua conta e todos os dados vinculados foram removidos com sucesso.'
