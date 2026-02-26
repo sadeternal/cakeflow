@@ -73,6 +73,70 @@ serve(async (req) => {
       throw new HttpError(500, 'Erro ao criar perfil', profileError);
     }
 
+    // Enviar notificação por e-mail sobre o novo usuário
+    try {
+      const resendApiKey = Deno.env.get('RESEND_API_KEY');
+      const to = Deno.env.get('REPORT_EMAIL_TO') || 'contato@cakeflow.com.br';
+      const from = Deno.env.get('REPORT_EMAIL_FROM') || 'CakeFlow <no-reply@cakeflow.com.br>';
+
+      if (resendApiKey) {
+        const subject = `Novo Usuário Cadastrado: ${fullName || email}`;
+        const html = `
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <meta charset="UTF-8" />
+            <style>
+              body { font-family: Arial, sans-serif; padding: 20px; color: #333; }
+              .container { max-width: 600px; margin: 0 auto; border: 1px solid #eee; border-radius: 8px; padding: 20px; }
+              .header { border-bottom: 2px solid #e11d48; padding-bottom: 10px; margin-bottom: 20px; }
+              .header h2 { color: #e11d48; margin: 0; }
+              .info { margin-bottom: 10px; }
+              .label { font-weight: bold; color: #666; }
+              .footer { margin-top: 30px; font-size: 12px; color: #999; text-align: center; }
+            </style>
+          </head>
+          <body>
+            <div class="container">
+              <div class="header">
+                <h2>O CakeFlow tem um novo usuário!</h2>
+              </div>
+              <div class="info">
+                <span class="label">Nome:</span> ${fullName || 'Não informado'}
+              </div>
+              <div class="info">
+                <span class="label">E-mail:</span> ${email}
+              </div>
+              <div class="info">
+                <span class="label">ID do Usuário:</span> ${user.id}
+              </div>
+              <div class="footer">
+                Este é um e-mail automático do sistema CakeFlow.
+              </div>
+            </div>
+          </body>
+          </html>
+        `;
+
+        await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${resendApiKey}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            from,
+            to: [to],
+            subject,
+            html
+          })
+        });
+      }
+    } catch (emailError) {
+      // Logamos o erro mas não impedimos a resposta de sucesso do cadastro
+      console.error('⚠️ [registerUser] Falha ao enviar e-mail de notificação:', emailError);
+    }
+
     return jsonResponse({
       success: true,
       user_id: user.id
