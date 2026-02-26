@@ -14,7 +14,11 @@ import {
   Upload,
   X,
   CreditCard,
-  Sparkles
+  Sparkles,
+  ArrowUp,
+  ArrowDown,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import AssinaturasTab from '@/components/configuracoes/AssinaturasTab';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -61,9 +65,9 @@ export default function Configuracoes() {
     taxa_delivery: 0,
     receber_pedidos_whatsapp: true,
     exibir_pedido_personalizado: true,
-    frase_pedido_personalizado: 'Monte seu Bolo Personalizado',
     horario_funcionamento: { inicio: '', fim: '' },
     dias_funcionamento: [],
+    etapas_pedido: [],
   });
 
   // Item forms
@@ -103,6 +107,16 @@ export default function Configuracoes() {
           frase_pedido_personalizado: conf.frase_pedido_personalizado || 'Monte seu Bolo Personalizado',
           horario_funcionamento: conf.horario_funcionamento || { inicio: '', fim: '' },
           dias_funcionamento: conf.dias_funcionamento || [],
+          etapas_pedido: Array.isArray(conf.etapas_pedido) && conf.etapas_pedido.length > 0
+            ? conf.etapas_pedido.flatMap(e =>
+              e.key === 'doces_salgados'
+                ? [
+                  { key: 'doces', label: 'Doces', ativo: e.ativo !== false },
+                  { key: 'salgados', label: 'Salgados', ativo: e.ativo !== false }
+                ]
+                : [e]
+            )
+            : [],
         });
       }
       return conf;
@@ -135,6 +149,9 @@ export default function Configuracoes() {
     horario_funcionamento: confeitariaForm.horario_funcionamento || { inicio: '', fim: '' },
     dias_funcionamento: Array.isArray(confeitariaForm.dias_funcionamento)
       ? confeitariaForm.dias_funcionamento
+      : [],
+    etapas_pedido: Array.isArray(confeitariaForm.etapas_pedido)
+      ? confeitariaForm.etapas_pedido
       : []
   });
 
@@ -243,7 +260,7 @@ export default function Configuracoes() {
   const openItemForm = (type, item = null) => {
     setItemType(type);
     setEditingItem(item);
-    
+
     if (item) {
       setItemForm({ ...item });
     } else {
@@ -332,29 +349,29 @@ export default function Configuracoes() {
     <div className="space-y-6">
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="grid w-full grid-cols-4 bg-white border-b border-gray-200 p-0 rounded-none h-auto gap-0">
-          <TabsTrigger 
-            value="geral" 
+          <TabsTrigger
+            value="geral"
             className="flex flex-col items-center justify-center gap-1 rounded-none border-b-2 border-transparent px-4 py-4 text-gray-600 hover:text-rose-600 data-[state=active]:border-rose-500 data-[state=active]:text-rose-600 data-[state=active]:bg-white transition-all"
           >
             <Settings2 className="w-5 h-5" />
             <span className="text-xs font-medium">Geral</span>
           </TabsTrigger>
-          <TabsTrigger 
-            value="catalogo" 
+          <TabsTrigger
+            value="catalogo"
             className="flex flex-col items-center justify-center gap-1 rounded-none border-b-2 border-transparent px-4 py-4 text-gray-600 hover:text-rose-600 data-[state=active]:border-rose-500 data-[state=active]:text-rose-600 data-[state=active]:bg-white transition-all"
           >
             <ExternalLink className="w-5 h-5" />
             <span className="text-xs font-medium">Catálogo</span>
           </TabsTrigger>
-          <TabsTrigger 
+          <TabsTrigger
             value="pagamentos"
             className="flex flex-col items-center justify-center gap-1 rounded-none border-b-2 border-transparent px-4 py-4 text-gray-600 hover:text-rose-600 data-[state=active]:border-rose-500 data-[state=active]:text-rose-600 data-[state=active]:bg-white transition-all"
           >
             <CreditCard className="w-5 h-5" />
             <span className="text-xs font-medium">Pag.</span>
           </TabsTrigger>
-          <TabsTrigger 
-            value="assinaturas" 
+          <TabsTrigger
+            value="assinaturas"
             className="flex flex-col items-center justify-center gap-1 rounded-none border-b-2 border-transparent px-4 py-4 text-gray-600 hover:text-rose-600 data-[state=active]:border-rose-500 data-[state=active]:text-rose-600 data-[state=active]:bg-white transition-all"
           >
             <Sparkles className="w-5 h-5" />
@@ -465,11 +482,10 @@ export default function Configuracoes() {
                         return (
                           <label
                             key={dia.value}
-                            className={`flex items-center justify-center p-2 rounded-lg border-2 cursor-pointer transition-colors ${
-                              isSelected
-                                ? 'bg-rose-100 border-rose-500 text-rose-700'
-                                : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
-                            }`}
+                            className={`flex items-center justify-center p-2 rounded-lg border-2 cursor-pointer transition-colors ${isSelected
+                              ? 'bg-rose-100 border-rose-500 text-rose-700'
+                              : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
+                              }`}
                           >
                             <Checkbox
                               checked={isSelected}
@@ -596,168 +612,245 @@ export default function Configuracoes() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div>
-                <h4 className="font-semibold text-gray-900 mb-4">URL do Catálogo</h4>
-                {confeitariaForm.slug && (() => {
-                  const catalogUrl = createCatalogUrl(confeitariaForm.slug);
-                  return (
-                    <div className="p-4 bg-rose-50 rounded-xl border border-rose-200">
-                      <p className="text-sm text-gray-600 mb-2">Link do seu catálogo:</p>
-                      <div className="flex items-center gap-2">
-                        <code className="flex-1 p-2 bg-white rounded border text-sm text-rose-600 truncate">
-                          {catalogUrl}
-                        </code>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => window.open(catalogUrl, '_blank')}
-                        >
-                          <ExternalLink className="w-4 h-4" />
-                        </Button>
-                      </div>
-                      <p className="text-xs text-gray-500 mt-2">
-                        O slug foi definido no cadastro e não pode ser alterado
-                      </p>
-                    </div>
-                  );
-                })()}
-              </div>
+              <Tabs defaultValue="geral" className="w-full">
+                <TabsList className="grid w-full grid-cols-2 mb-6 bg-rose-50/50 p-1">
+                  <TabsTrigger value="geral" className="data-[state=active]:bg-white data-[state=active]:text-rose-600 data-[state=active]:shadow-sm">Geral</TabsTrigger>
+                  <TabsTrigger value="personalizacao" className="data-[state=active]:bg-white data-[state=active]:text-rose-600 data-[state=active]:shadow-sm">Personalização</TabsTrigger>
+                </TabsList>
 
-              <div className="pt-4 border-t">
-                <h4 className="font-semibold text-gray-900 mb-4">Identidade Visual</h4>
-                <div className="grid md:grid-cols-2 gap-4">
+                <TabsContent value="geral" className="space-y-6 mt-0">
                   <div>
-                    <Label>Logo da Confeitaria</Label>
-                    <div className="mt-2 space-y-3">
-                      {confeitariaForm.logo_url ? (
-                        <div className="relative inline-block">
-                          <img
-                            src={confeitariaForm.logo_url}
-                            alt="Logo"
-                            className="h-24 w-24 object-cover rounded-full border-2 border-rose-200"
-                          />
-                          <button
-                            onClick={() => setConfeitariaForm({ ...confeitariaForm, logo_url: '' })}
-                            className="absolute -top-2 -right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
+                    <h4 className="font-semibold text-gray-900 mb-4">URL do Catálogo</h4>
+                    {confeitariaForm.slug && (() => {
+                      const catalogUrl = createCatalogUrl(confeitariaForm.slug);
+                      return (
+                        <div className="p-4 bg-rose-50 rounded-xl border border-rose-200">
+                          <p className="text-sm text-gray-600 mb-2">Link do seu catálogo:</p>
+                          <div className="flex items-center gap-2">
+                            <code className="flex-1 p-2 bg-white rounded border text-sm text-rose-600 truncate">
+                              {catalogUrl}
+                            </code>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => window.open(catalogUrl, '_blank')}
+                            >
+                              <ExternalLink className="w-4 h-4" />
+                            </Button>
+                          </div>
+                          <p className="text-xs text-gray-500 mt-2">
+                            O slug foi definido no cadastro e não pode ser alterado
+                          </p>
                         </div>
-                      ) : (
-                        <div className="h-24 w-24 rounded-full border-2 border-dashed border-gray-300 flex items-center justify-center bg-gray-50">
-                          <Upload className="w-6 h-6 text-gray-400" />
+                      );
+                    })()}
+                  </div>
+
+                  <div className="pt-4 border-t">
+                    <h4 className="font-semibold text-gray-900 mb-4">Identidade Visual</h4>
+                    <div className="grid md:grid-cols-2 gap-4">
+                      <div>
+                        <Label>Logo da Confeitaria</Label>
+                        <div className="mt-2 space-y-3">
+                          {confeitariaForm.logo_url ? (
+                            <div className="relative inline-block">
+                              <img
+                                src={confeitariaForm.logo_url}
+                                alt="Logo"
+                                className="h-24 w-24 object-cover rounded-full border-2 border-rose-200"
+                              />
+                              <button
+                                onClick={() => setConfeitariaForm({ ...confeitariaForm, logo_url: '' })}
+                                className="absolute -top-2 -right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="h-24 w-24 rounded-full border-2 border-dashed border-gray-300 flex items-center justify-center bg-gray-50">
+                              <Upload className="w-6 h-6 text-gray-400" />
+                            </div>
+                          )}
+                          <div>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={handleLogoUpload}
+                              className="hidden"
+                              id="logo-upload"
+                              disabled={uploadingLogo}
+                            />
+                            <label htmlFor="logo-upload">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                disabled={uploadingLogo}
+                                onClick={() => document.getElementById('logo-upload').click()}
+                              >
+                                <Upload className="w-4 h-4 mr-2" />
+                                {uploadingLogo ? 'Enviando...' : 'Escolher Imagem'}
+                              </Button>
+                            </label>
+                          </div>
+                        </div>
+                      </div>
+                      <div>
+                        <Label>Cor Principal</Label>
+                        <div className="flex gap-2 mt-2">
+                          <Input
+                            type="color"
+                            value={confeitariaForm.cor_principal || '#ec4899'}
+                            onChange={(e) => setConfeitariaForm({ ...confeitariaForm, cor_principal: e.target.value })}
+                            className="w-20 h-11"
+                          />
+                          <Input
+                            value={confeitariaForm.cor_principal || '#ec4899'}
+                            onChange={(e) => setConfeitariaForm({ ...confeitariaForm, cor_principal: e.target.value })}
+                            placeholder="#ec4899"
+                          />
+                        </div>
+                        <p className="text-xs text-gray-500 mt-2">
+                          Esta cor será usada nos botões e destaques do catálogo
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="pt-4 border-t">
+                    <h4 className="font-semibold text-gray-900 mb-4">Notificações</h4>
+                    <div className="flex items-start justify-between p-4 bg-gray-50 rounded-xl">
+                      <div className="flex-1">
+                        <Label className="text-base font-medium text-gray-900">
+                          Receber pedidos via WhatsApp
+                        </Label>
+                        <p className="text-sm text-gray-500 mt-1">
+                          Quando ativado, os clientes poderão enviar os detalhes do pedido diretamente para seu WhatsApp após finalizar no catálogo
+                        </p>
+                      </div>
+                      <Switch
+                        checked={confeitariaForm.receber_pedidos_whatsapp}
+                        onCheckedChange={(checked) => setConfeitariaForm({ ...confeitariaForm, receber_pedidos_whatsapp: checked })}
+                        className="ml-4"
+                      />
+                    </div>
+                    {confeitariaForm.receber_pedidos_whatsapp && !confeitariaForm.telefone && (
+                      <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-2">
+                        <div className="text-amber-600 text-sm">
+                          ⚠️ Configure seu telefone/WhatsApp na aba <strong>Geral</strong> para receber os pedidos
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="personalizacao" className="space-y-6 mt-0">
+                  <div>
+                    <h4 className="font-semibold text-gray-900 mb-4">Pedido Personalizado</h4>
+                    <div className="space-y-4">
+                      <div className="flex items-start justify-between p-4 bg-gray-50 rounded-xl">
+                        <div className="flex-1">
+                          <Label className="text-base font-medium text-gray-900">
+                            Exibir pedido personalizado no catálogo
+                          </Label>
+                          <p className="text-sm text-gray-500 mt-1">
+                            Mostra a opção de montar bolo personalizado no catálogo público
+                          </p>
+                        </div>
+                        <Switch
+                          checked={confeitariaForm.exibir_pedido_personalizado}
+                          onCheckedChange={(checked) => setConfeitariaForm({ ...confeitariaForm, exibir_pedido_personalizado: checked })}
+                          className="ml-4"
+                        />
+                      </div>
+                      {confeitariaForm.exibir_pedido_personalizado && (
+                        <div>
+                          <Label>Frase do Pedido Personalizado</Label>
+                          <Input
+                            value={confeitariaForm.frase_pedido_personalizado}
+                            onChange={(e) => setConfeitariaForm({ ...confeitariaForm, frase_pedido_personalizado: e.target.value })}
+                            placeholder="Monte seu Bolo Personalizado"
+                          />
+                          <p className="text-xs text-gray-500 mt-2">
+                            Esta frase será exibida no botão de pedido personalizado no catálogo
+                          </p>
                         </div>
                       )}
-                      <div>
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={handleLogoUpload}
-                          className="hidden"
-                          id="logo-upload"
-                          disabled={uploadingLogo}
-                        />
-                        <label htmlFor="logo-upload">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            disabled={uploadingLogo}
-                            onClick={() => document.getElementById('logo-upload').click()}
-                          >
-                            <Upload className="w-4 h-4 mr-2" />
-                            {uploadingLogo ? 'Enviando...' : 'Escolher Imagem'}
-                          </Button>
-                        </label>
-                      </div>
                     </div>
                   </div>
-                  <div>
-                    <Label>Cor Principal</Label>
-                    <div className="flex gap-2 mt-2">
-                      <Input
-                        type="color"
-                        value={confeitariaForm.cor_principal || '#ec4899'}
-                        onChange={(e) => setConfeitariaForm({ ...confeitariaForm, cor_principal: e.target.value })}
-                        className="w-20 h-11"
-                      />
-                      <Input
-                        value={confeitariaForm.cor_principal || '#ec4899'}
-                        onChange={(e) => setConfeitariaForm({ ...confeitariaForm, cor_principal: e.target.value })}
-                        placeholder="#ec4899"
-                      />
-                    </div>
-                    <p className="text-xs text-gray-500 mt-2">
-                      Esta cor será usada nos botões e destaques do catálogo
+
+                  <div className="pt-4 border-t">
+                    <h4 className="font-semibold text-gray-900 mb-2">Ordem e Visibilidade das Etapas</h4>
+                    <p className="text-sm text-gray-500 mb-6">
+                      Configure quais etapas serão exibidas aos seus clientes e em qual ordem elas devem aparecer.
                     </p>
-                  </div>
-                </div>
-              </div>
 
-              <div className="pt-4 border-t">
-                <h4 className="font-semibold text-gray-900 mb-4">Pedido Personalizado</h4>
-                <div className="space-y-4">
-                  <div className="flex items-start justify-between p-4 bg-gray-50 rounded-xl">
-                    <div className="flex-1">
-                      <Label className="text-base font-medium text-gray-900">
-                        Exibir pedido personalizado no catálogo
-                      </Label>
-                      <p className="text-sm text-gray-500 mt-1">
-                        Mostra a opção de montar bolo personalizado no catálogo público
-                      </p>
-                    </div>
-                    <Switch
-                      checked={confeitariaForm.exibir_pedido_personalizado}
-                      onCheckedChange={(checked) => setConfeitariaForm({ ...confeitariaForm, exibir_pedido_personalizado: checked })}
-                      className="ml-4"
-                    />
-                  </div>
-                  {confeitariaForm.exibir_pedido_personalizado && (
-                    <div>
-                      <Label>Frase do Pedido Personalizado</Label>
-                      <Input
-                        value={confeitariaForm.frase_pedido_personalizado}
-                        onChange={(e) => setConfeitariaForm({ ...confeitariaForm, frase_pedido_personalizado: e.target.value })}
-                        placeholder="Monte seu Bolo Personalizado"
-                      />
-                      <p className="text-xs text-gray-500 mt-2">
-                        Esta frase será exibida no botão de pedido personalizado no catálogo
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </div>
+                    <div className="space-y-3">
+                      {confeitariaForm.etapas_pedido?.map((etapa, index) => (
+                        <div
+                          key={etapa.key}
+                          className={`flex items-center justify-between p-4 rounded-xl border transition-all ${etapa.ativo === false ? 'bg-gray-50 opacity-60' : 'bg-white shadow-sm border-gray-100'
+                            }`}
+                        >
+                          <div className="flex items-center gap-4">
+                            <div className="flex flex-col gap-1">
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-7 w-7"
+                                disabled={index === 0}
+                                onClick={() => {
+                                  const novasEtapas = [...confeitariaForm.etapas_pedido];
+                                  [novasEtapas[index - 1], novasEtapas[index]] = [novasEtapas[index], novasEtapas[index - 1]];
+                                  setConfeitariaForm({ ...confeitariaForm, etapas_pedido: novasEtapas });
+                                }}
+                              >
+                                <ArrowUp className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-7 w-7"
+                                disabled={index === confeitariaForm.etapas_pedido.length - 1}
+                                onClick={() => {
+                                  const novasEtapas = [...confeitariaForm.etapas_pedido];
+                                  [novasEtapas[index], novasEtapas[index + 1]] = [novasEtapas[index + 1], novasEtapas[index]];
+                                  setConfeitariaForm({ ...confeitariaForm, etapas_pedido: novasEtapas });
+                                }}
+                              >
+                                <ArrowDown className="w-4 h-4" />
+                              </Button>
+                            </div>
+                            <div>
+                              <p className="font-semibold text-gray-900">{etapa.label}</p>
+                              <p className="text-xs text-gray-500 capitalize">{etapa.key.replace('_', ' ')}</p>
+                            </div>
+                          </div>
 
-              <div className="pt-4 border-t">
-                <h4 className="font-semibold text-gray-900 mb-4">Notificações</h4>
-                <div className="flex items-start justify-between p-4 bg-gray-50 rounded-xl">
-                  <div className="flex-1">
-                    <Label className="text-base font-medium text-gray-900">
-                      Receber pedidos via WhatsApp
-                    </Label>
-                    <p className="text-sm text-gray-500 mt-1">
-                      Quando ativado, os clientes poderão enviar os detalhes do pedido diretamente para seu WhatsApp após finalizar no catálogo
-                    </p>
-                  </div>
-                  <Switch
-                    checked={confeitariaForm.receber_pedidos_whatsapp}
-                    onCheckedChange={(checked) => setConfeitariaForm({ ...confeitariaForm, receber_pedidos_whatsapp: checked })}
-                    className="ml-4"
-                  />
-                </div>
-                {confeitariaForm.receber_pedidos_whatsapp && !confeitariaForm.telefone && (
-                  <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-2">
-                    <div className="text-amber-600 text-sm">
-                      ⚠️ Configure seu telefone/WhatsApp na aba <strong>Geral</strong> para receber os pedidos
+                          <div className="flex items-center gap-3">
+                            <span className="text-xs font-medium text-gray-400">
+                              {etapa.ativo === false ? 'Oculta' : 'Visível'}
+                            </span>
+                            <Switch
+                              checked={etapa.ativo !== false}
+                              onCheckedChange={(checked) => {
+                                const novasEtapas = confeitariaForm.etapas_pedido.map((e, idx) =>
+                                  idx === index ? { ...e, ativo: checked } : e
+                                );
+                                setConfeitariaForm({ ...confeitariaForm, etapas_pedido: novasEtapas });
+                              }}
+                            />
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
-                )}
-              </div>
-
+                </TabsContent>
+              </Tabs>
               <Button
                 onClick={() => updateConfeitaria.mutate()}
                 disabled={updateConfeitaria.isPending || !confeitaria?.id}
-                className="bg-rose-500 hover:bg-rose-600"
+                className="bg-rose-500 hover:bg-rose-600 mt-6"
               >
                 <Save className="w-4 h-4 mr-2" />
                 {updateConfeitaria.isPending ? 'Salvando...' : 'Salvar Configurações'}
@@ -776,7 +869,7 @@ export default function Configuracoes() {
             }}
           />
         </TabsContent>
-        </Tabs>
+      </Tabs>
 
       {/* Item Form Dialog */}
       <Dialog open={showItemForm} onOpenChange={closeItemForm}>
@@ -806,7 +899,7 @@ export default function Configuracoes() {
             </Button>
           </DialogFooter>
         </DialogContent>
-      </Dialog>
-    </div>
+      </Dialog >
+    </div >
   );
 }

@@ -478,22 +478,14 @@ const requestFunction = async (name, payload) => {
       await validateAccessTokenWithAuthApi(token);
     }
 
-    const authHeaders = {
+    return {
       apikey: supabaseAnonKey || '',
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`
     };
-
-    console.log(`[supabase-client] Chamando Edge Function: ${name}`, {
-      apikey_preview: authHeaders.apikey ? `${authHeaders.apikey.slice(0, 10)}...` : 'empty',
-      auth_header: authHeaders.Authorization ? 'Bearer <token>' : 'none'
-    });
-
-    return authHeaders;
   };
 
   const headers = await getFunctionHeaders();
-  console.log(`[supabase-client] Payload para ${name}:`, payload);
 
   let response = await fetch(`${supabaseUrl}/functions/v1/${name}`, {
     method: 'POST',

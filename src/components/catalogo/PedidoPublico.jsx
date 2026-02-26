@@ -27,21 +27,39 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-const steps = [
-  { id: 1, title: 'Tamanho' },
-  { id: 2, title: 'Massa' },
-  { id: 3, title: 'Recheios' },
-  { id: 4, title: 'Cobertura' },
-  { id: 5, title: 'Extras' },
-  { id: 6, title: 'Doces e Salgados' },
-  { id: 7, title: 'Entrega' },
-  { id: 8, title: 'Seus Dados' },
-  { id: 9, title: 'Pagamento' },
-  { id: 10, title: 'Resumo' },
+// Etapas padrão caso a confeitaria não tenha configurado
+const defaultSteps = [
+  { key: 'tamanho', title: 'Tamanho' },
+  { key: 'massa', title: 'Massa' },
+  { key: 'recheios', title: 'Recheios' },
+  { key: 'cobertura', title: 'Cobertura' },
+  { key: 'extras', title: 'Extras' },
+  { key: 'doces', title: 'Doces' },
+  { key: 'salgados', title: 'Salgados' },
+  { key: 'entrega', title: 'Entrega' },
+  { key: 'dados', title: 'Seus Dados' },
+  { key: 'pagamento', title: 'Pagamento' },
+  { key: 'resumo', title: 'Resumo' },
 ];
 
 export default function PedidoPublico({ confeitaria, onClose }) {
   const queryClient = useQueryClient();
+
+  // Calcular as etapas ativas com base na configuração da confeitaria
+  const steps = React.useMemo(() => {
+    const configuradas = Array.isArray(confeitaria?.etapas_pedido) && confeitaria.etapas_pedido.length > 0
+      ? confeitaria.etapas_pedido
+      : defaultSteps.map((s, i) => ({ ...s, ativo: true }));
+
+    return configuradas
+      .filter(s => s.ativo !== false)
+      .map((s, i) => ({
+        id: i + 1,
+        key: s.key,
+        title: s.label || s.title
+      }));
+  }, [confeitaria.etapas_pedido]);
+
   const [currentStep, setCurrentStep] = useState(1);
   const [enviandoPedido, setEnviandoPedido] = useState(false);
   const [pedidoEnviado, setPedidoEnviado] = useState(false);
@@ -108,7 +126,7 @@ export default function PedidoPublico({ confeitaria, onClose }) {
 
   const { data: doces = [] } = useQuery({
     queryKey: ['doces-pedido', confeitaria.id],
-    queryFn: () => appClient.entities.Doce.filter({ 
+    queryFn: () => appClient.entities.Doce.filter({
       confeitaria_id: confeitaria.id,
       ativo: true
     }),
@@ -116,7 +134,7 @@ export default function PedidoPublico({ confeitaria, onClose }) {
 
   const { data: salgados = [] } = useQuery({
     queryKey: ['salgados-pedido', confeitaria.id],
-    queryFn: () => appClient.entities.Salgado.filter({ 
+    queryFn: () => appClient.entities.Salgado.filter({
       confeitaria_id: confeitaria.id,
       ativo: true
     }),
@@ -124,7 +142,7 @@ export default function PedidoPublico({ confeitaria, onClose }) {
 
   const { data: formasPagamento = [] } = useQuery({
     queryKey: ['formasPagamento', confeitaria.id],
-    queryFn: () => appClient.entities.FormaPagamento.filter({ 
+    queryFn: () => appClient.entities.FormaPagamento.filter({
       confeitaria_id: confeitaria.id,
       ativo: true
     }),
@@ -254,16 +272,20 @@ export default function PedidoPublico({ confeitaria, onClose }) {
   };
 
   const canProceed = () => {
-    switch (currentStep) {
-      case 1: return pedido.tamanho_id;
-      case 2: return pedido.massa_id;
-      case 3: return pedido.recheios.length > 0;
-      case 4: return pedido.cobertura_id;
-      case 5: return true; // Extras
-      case 6: return true; // Doces e Salgados
-      case 7: return pedido.data_entrega;
-      case 8: return cliente.nome && cliente.telefone;
-      case 9: return pedido.forma_pagamento;
+    const step = steps.find(s => s.id === currentStep);
+    if (!step) return true;
+
+    switch (step.key) {
+      case 'tamanho': return pedido.tamanho_id;
+      case 'massa': return pedido.massa_id;
+      case 'recheios': return pedido.recheios.length > 0;
+      case 'cobertura': return pedido.cobertura_id;
+      case 'extras': return true;
+      case 'doces': return true;
+      case 'salgados': return true;
+      case 'entrega': return pedido.data_entrega;
+      case 'dados': return cliente.nome && cliente.telefone;
+      case 'pagamento': return pedido.forma_pagamento;
       default: return true;
     }
   };
@@ -275,7 +297,7 @@ export default function PedidoPublico({ confeitaria, onClose }) {
       <Dialog open={true} onOpenChange={onClose}>
         <DialogContent className="max-w-md">
           <div className="text-center py-8">
-            <div 
+            <div
               className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"
               style={{ backgroundColor: `${corPrincipal}20` }}
             >
@@ -286,8 +308,8 @@ export default function PedidoPublico({ confeitaria, onClose }) {
               Recebemos seu pedido e entraremos em contato em breve para confirmação e pagamento.
             </p>
             {confeitaria.receber_pedidos_whatsapp && confeitaria.telefone ? (
-              <Button 
-                onClick={handleEnviarWhatsApp} 
+              <Button
+                onClick={handleEnviarWhatsApp}
                 className="w-full bg-green-600 hover:bg-green-700"
               >
                 <MessageCircle className="w-4 h-4 mr-2" />
@@ -334,8 +356,8 @@ export default function PedidoPublico({ confeitaria, onClose }) {
 
         {/* Step Content */}
         <div className="py-4">
-          {/* Step 1: Tamanho */}
-          {currentStep === 1 && (
+          {/* Step: Tamanho */}
+          {steps.find(s => s.id === currentStep)?.key === 'tamanho' && (
             <RadioGroup
               value={pedido.tamanho_id}
               onValueChange={(value) => {
@@ -353,11 +375,10 @@ export default function PedidoPublico({ confeitaria, onClose }) {
               {tamanhos.map((tamanho) => (
                 <label
                   key={tamanho.id}
-                  className={`flex items-center justify-between p-4 rounded-xl cursor-pointer transition-colors ${
-                    pedido.tamanho_id === tamanho.id
-                      ? 'border-2'
-                      : 'bg-gray-50 hover:bg-gray-100 border-2 border-transparent'
-                  }`}
+                  className={`flex items-center justify-between p-4 rounded-xl cursor-pointer transition-colors ${pedido.tamanho_id === tamanho.id
+                    ? 'border-2'
+                    : 'bg-gray-50 hover:bg-gray-100 border-2 border-transparent'
+                    }`}
                   style={{
                     backgroundColor: pedido.tamanho_id === tamanho.id ? `${corPrincipal}10` : undefined,
                     borderColor: pedido.tamanho_id === tamanho.id ? corPrincipal : undefined,
@@ -380,8 +401,8 @@ export default function PedidoPublico({ confeitaria, onClose }) {
             </RadioGroup>
           )}
 
-          {/* Step 2: Massa */}
-          {currentStep === 2 && (
+          {/* Step: Massa */}
+          {steps.find(s => s.id === currentStep)?.key === 'massa' && (
             <RadioGroup
               value={pedido.massa_id}
               onValueChange={(value) => {
@@ -398,11 +419,10 @@ export default function PedidoPublico({ confeitaria, onClose }) {
               {massas.map((massa) => (
                 <label
                   key={massa.id}
-                  className={`flex items-center justify-between p-4 rounded-xl cursor-pointer transition-colors ${
-                    pedido.massa_id === massa.id
-                      ? 'border-2'
-                      : 'bg-gray-50 hover:bg-gray-100 border-2 border-transparent'
-                  }`}
+                  className={`flex items-center justify-between p-4 rounded-xl cursor-pointer transition-colors ${pedido.massa_id === massa.id
+                    ? 'border-2'
+                    : 'bg-gray-50 hover:bg-gray-100 border-2 border-transparent'
+                    }`}
                   style={{
                     backgroundColor: pedido.massa_id === massa.id ? `${corPrincipal}10` : undefined,
                     borderColor: pedido.massa_id === massa.id ? corPrincipal : undefined,
@@ -429,8 +449,8 @@ export default function PedidoPublico({ confeitaria, onClose }) {
             </RadioGroup>
           )}
 
-          {/* Step 3: Recheios */}
-          {currentStep === 3 && (
+          {/* Step: Recheios */}
+          {steps.find(s => s.id === currentStep)?.key === 'recheios' && (
             <div className="space-y-4">
               <div className="flex items-center justify-between p-3 rounded-lg" style={{ backgroundColor: `${corPrincipal}10` }}>
                 <span className="text-sm font-medium" style={{ color: corPrincipal }}>
@@ -456,13 +476,12 @@ export default function PedidoPublico({ confeitaria, onClose }) {
                         return (
                           <label
                             key={recheio.id}
-                            className={`flex items-center justify-between p-4 rounded-xl cursor-pointer transition-colors ${
-                              isSelected
-                                ? 'border-2'
-                                : canSelect
-                                  ? 'bg-gray-50 hover:bg-gray-100 border-2 border-transparent'
-                                  : 'bg-gray-100 opacity-50 cursor-not-allowed border-2 border-transparent'
-                            }`}
+                            className={`flex items-center justify-between p-4 rounded-xl cursor-pointer transition-colors ${isSelected
+                              ? 'border-2'
+                              : canSelect
+                                ? 'bg-gray-50 hover:bg-gray-100 border-2 border-transparent'
+                                : 'bg-gray-100 opacity-50 cursor-not-allowed border-2 border-transparent'
+                              }`}
                             style={{
                               backgroundColor: isSelected ? `${corPrincipal}10` : undefined,
                               borderColor: isSelected ? corPrincipal : undefined,
@@ -509,8 +528,8 @@ export default function PedidoPublico({ confeitaria, onClose }) {
             </div>
           )}
 
-          {/* Step 4: Cobertura */}
-          {currentStep === 4 && (
+          {/* Step: Cobertura */}
+          {steps.find(s => s.id === currentStep)?.key === 'cobertura' && (
             <RadioGroup
               value={pedido.cobertura_id}
               onValueChange={(value) => {
@@ -527,11 +546,10 @@ export default function PedidoPublico({ confeitaria, onClose }) {
               {coberturas.map((cobertura) => (
                 <label
                   key={cobertura.id}
-                  className={`flex items-center justify-between p-4 rounded-xl cursor-pointer transition-colors ${
-                    pedido.cobertura_id === cobertura.id
-                      ? 'border-2'
-                      : 'bg-gray-50 hover:bg-gray-100 border-2 border-transparent'
-                  }`}
+                  className={`flex items-center justify-between p-4 rounded-xl cursor-pointer transition-colors ${pedido.cobertura_id === cobertura.id
+                    ? 'border-2'
+                    : 'bg-gray-50 hover:bg-gray-100 border-2 border-transparent'
+                    }`}
                   style={{
                     backgroundColor: pedido.cobertura_id === cobertura.id ? `${corPrincipal}10` : undefined,
                     borderColor: pedido.cobertura_id === cobertura.id ? corPrincipal : undefined,
@@ -558,8 +576,8 @@ export default function PedidoPublico({ confeitaria, onClose }) {
             </RadioGroup>
           )}
 
-          {/* Step 5: Extras */}
-          {currentStep === 5 && (
+          {/* Step: Extras */}
+          {steps.find(s => s.id === currentStep)?.key === 'extras' && (
             <div className="space-y-3">
               <p className="text-sm text-gray-500 mb-4">Selecione os extras desejados (opcional)</p>
               {extras.map((extra) => {
@@ -568,11 +586,10 @@ export default function PedidoPublico({ confeitaria, onClose }) {
                 return (
                   <div
                     key={extra.id}
-                    className={`p-4 rounded-xl transition-colors ${
-                      selected
-                        ? 'border-2'
-                        : 'bg-gray-50 border-2 border-transparent'
-                    }`}
+                    className={`p-4 rounded-xl transition-colors ${selected
+                      ? 'border-2'
+                      : 'bg-gray-50 border-2 border-transparent'
+                      }`}
                     style={{
                       backgroundColor: selected ? `${corPrincipal}10` : undefined,
                       borderColor: selected ? corPrincipal : undefined,
@@ -628,10 +645,9 @@ export default function PedidoPublico({ confeitaria, onClose }) {
             </div>
           )}
 
-          {/* Step 6: Doces e Salgados */}
-          {currentStep === 6 && (
+          {/* Step: Doces */}
+          {steps.find(s => s.id === currentStep)?.key === 'doces' && (
             <div className="space-y-6">
-              {/* Doces */}
               <div className="space-y-4">
                 <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
                   <div>
@@ -641,8 +657,8 @@ export default function PedidoPublico({ confeitaria, onClose }) {
                   <Checkbox
                     checked={pedido.deseja_doces}
                     onCheckedChange={(checked) => {
-                      setPedido({ 
-                        ...pedido, 
+                      setPedido({
+                        ...pedido,
                         deseja_doces: checked,
                         doces: checked ? pedido.doces : []
                       });
@@ -661,13 +677,12 @@ export default function PedidoPublico({ confeitaria, onClose }) {
                         <p className="text-sm font-medium text-gray-700">Selecione os doces:</p>
                         {doces.map((doce) => {
                           const selected = pedido.doces.find(d => d.id === doce.id);
-                          
+
                           return (
                             <div
                               key={doce.id}
-                              className={`p-4 rounded-xl transition-colors ${
-                                selected ? 'border-2' : 'bg-gray-50 border-2 border-transparent'
-                              }`}
+                              className={`p-4 rounded-xl transition-colors ${selected ? 'border-2' : 'bg-gray-50 border-2 border-transparent'
+                                }`}
                               style={{
                                 backgroundColor: selected ? `${corPrincipal}10` : undefined,
                                 borderColor: selected ? corPrincipal : undefined,
@@ -776,8 +791,12 @@ export default function PedidoPublico({ confeitaria, onClose }) {
                   </div>
                 )}
               </div>
+            </div>
+          )}
 
-              {/* Salgados */}
+          {/* Step: Salgados */}
+          {steps.find(s => s.id === currentStep)?.key === 'salgados' && (
+            <div className="space-y-6">
               <div className="space-y-4">
                 <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
                   <div>
@@ -787,8 +806,8 @@ export default function PedidoPublico({ confeitaria, onClose }) {
                   <Checkbox
                     checked={pedido.deseja_salgados}
                     onCheckedChange={(checked) => {
-                      setPedido({ 
-                        ...pedido, 
+                      setPedido({
+                        ...pedido,
                         deseja_salgados: checked,
                         salgados: checked ? pedido.salgados : []
                       });
@@ -807,13 +826,12 @@ export default function PedidoPublico({ confeitaria, onClose }) {
                         <p className="text-sm font-medium text-gray-700">Selecione os salgados:</p>
                         {salgados.map((salgado) => {
                           const selected = pedido.salgados.find(s => s.id === salgado.id);
-                          
+
                           return (
                             <div
                               key={salgado.id}
-                              className={`p-4 rounded-xl transition-colors ${
-                                selected ? 'border-2' : 'bg-gray-50 border-2 border-transparent'
-                              }`}
+                              className={`p-4 rounded-xl transition-colors ${selected ? 'border-2' : 'bg-gray-50 border-2 border-transparent'
+                                }`}
                               style={{
                                 backgroundColor: selected ? `${corPrincipal}10` : undefined,
                                 borderColor: selected ? corPrincipal : undefined,
@@ -925,8 +943,8 @@ export default function PedidoPublico({ confeitaria, onClose }) {
             </div>
           )}
 
-          {/* Step 7: Entrega */}
-          {currentStep === 7 && (
+          {/* Step: Entrega */}
+          {steps.find(s => s.id === currentStep)?.key === 'entrega' && (
             <div className="space-y-4">
               <div>
                 <Label>Data de Entrega *</Label>
@@ -961,8 +979,8 @@ export default function PedidoPublico({ confeitaria, onClose }) {
             </div>
           )}
 
-          {/* Step 8: Seus Dados */}
-          {currentStep === 8 && (
+          {/* Step: Seus Dados */}
+          {steps.find(s => s.id === currentStep)?.key === 'dados' && (
             <div className="space-y-4">
               <div>
                 <Label>Nome completo *</Label>
@@ -991,8 +1009,8 @@ export default function PedidoPublico({ confeitaria, onClose }) {
             </div>
           )}
 
-          {/* Step 9: Pagamento */}
-          {currentStep === 9 && (
+          {/* Step: Pagamento */}
+          {steps.find(s => s.id === currentStep)?.key === 'pagamento' && (
             <div className="space-y-4">
               <Label>Forma de Pagamento *</Label>
               <RadioGroup
@@ -1003,11 +1021,10 @@ export default function PedidoPublico({ confeitaria, onClose }) {
                 {formasPagamento.map((forma) => (
                   <label
                     key={forma.id}
-                    className={`flex items-center gap-3 p-4 rounded-xl cursor-pointer transition-colors ${
-                      pedido.forma_pagamento === forma.nome
-                        ? 'border-2'
-                        : 'bg-gray-50 hover:bg-gray-100 border-2 border-transparent'
-                    }`}
+                    className={`flex items-center gap-3 p-4 rounded-xl cursor-pointer transition-colors ${pedido.forma_pagamento === forma.nome
+                      ? 'border-2'
+                      : 'bg-gray-50 hover:bg-gray-100 border-2 border-transparent'
+                      }`}
                     style={{
                       backgroundColor: pedido.forma_pagamento === forma.nome ? `${corPrincipal}10` : undefined,
                       borderColor: pedido.forma_pagamento === forma.nome ? corPrincipal : undefined,
@@ -1021,8 +1038,8 @@ export default function PedidoPublico({ confeitaria, onClose }) {
             </div>
           )}
 
-          {/* Step 10: Resumo */}
-          {currentStep === 10 && (
+          {/* Step: Resumo */}
+          {steps.find(s => s.id === currentStep)?.key === 'resumo' && (
             <div className="space-y-6">
               <div className="grid gap-4">
                 <div className="p-4 bg-gray-50 rounded-xl">

@@ -41,7 +41,6 @@ export const getSupabaseClients = (req: Request) => {
     throw missingEnvError('SUPABASE_ANON_KEY');
   }
 
-  console.log(`[edge-function] Supabase Clients Init. Key Source: ${req.headers.get('apikey') ? 'header' : 'env'}`);
 
   const authHeader = req.headers.get('Authorization') || '';
   const userClient = createClient(supabaseUrl, supabaseAnonKey, {
@@ -61,8 +60,7 @@ export const requireUserContext = async (req: Request): Promise<UserContext> => 
   const { data, error } = await userClient.auth.getUser();
 
   if (error || !data?.user) {
-    console.error('[edge-function] Auth Error:', error?.message || 'No user found');
-    throw new HttpError(401, error?.message || 'Unauthorized');
+    throw new HttpError(401, 'Unauthorized');
   }
 
   const user = data.user as unknown as Record<string, unknown>;

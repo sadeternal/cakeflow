@@ -18,22 +18,22 @@ export default function AssinaturasTab({ confeitaria, onUpdate }) {
       if (urlParams.get('checkout') === 'success' && !checkoutProcessed) {
         setCheckoutProcessed(true);
         toast.success('Assinatura iniciada com sucesso!');
-        
+
         // Aguardar webhook processar (3 segundos)
         await new Promise(resolve => setTimeout(resolve, 3000));
-        
+
         // Recarregar dados
         if (onUpdate) {
           await onUpdate();
         }
-        
+
         // Limpar URL
         urlParams.delete('checkout');
         const newUrl = `${window.location.pathname}${urlParams.toString() ? '?' + urlParams.toString() : ''}`;
         window.history.replaceState({}, '', newUrl);
       }
     };
-    
+
     handleCheckoutSuccess();
   }, [checkoutProcessed, onUpdate]);
 
@@ -54,7 +54,7 @@ export default function AssinaturasTab({ confeitaria, onUpdate }) {
           const response = await appClient.functions.invoke('syncSubscription', {
             confeitaria_id: confeitaria.id
           });
-          
+
           if (response?.data?.success && onUpdate) {
             await onUpdate();
           }
@@ -63,7 +63,7 @@ export default function AssinaturasTab({ confeitaria, onUpdate }) {
         }
       }
     };
-    
+
     autoSync();
   }, [
     confeitaria?.id,
@@ -129,10 +129,7 @@ export default function AssinaturasTab({ confeitaria, onUpdate }) {
     try {
       setLoading(true);
 
-      console.log('🚀 Iniciando processo de checkout para confeitaria:', confeitaria?.id);
-      
       if (!confeitaria?.id) {
-        console.error('❌ Erro: confeitaria.id está ausente!', confeitaria);
         throw new Error('Identificador da confeitaria não encontrado. Tente atualizar a página.');
       }
 
@@ -165,7 +162,7 @@ export default function AssinaturasTab({ confeitaria, onUpdate }) {
       const response = await appClient.functions.invoke('syncSubscription', {
         confeitaria_id: confeitaria.id
       });
-      
+
       if (response?.data?.success) {
         toast.success('Assinatura sincronizada com sucesso!');
         if (onUpdate) {
