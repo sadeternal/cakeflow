@@ -80,6 +80,8 @@ export default function Pedidos() {
     queryKey: ['pedidos', user?.confeitaria_id],
     queryFn: () => appClient.entities.Pedido.filter({ confeitaria_id: user.confeitaria_id }, '-created_date'),
     enabled: !!user?.confeitaria_id,
+    refetchInterval: 30000,
+    refetchOnWindowFocus: true,
   });
 
   const updateStatusMutation = useMutation({

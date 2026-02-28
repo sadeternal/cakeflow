@@ -70,7 +70,9 @@ export default function Dashboard() {
   const { data: pedidos = [] } = useQuery({
     queryKey: ['pedidos', user?.confeitaria_id],
     queryFn: () => appClient.entities.Pedido.filter({ confeitaria_id: user.confeitaria_id }, '-created_date'),
-    enabled: !!user?.confeitaria_id
+    enabled: !!user?.confeitaria_id,
+    refetchInterval: 30000,
+    refetchOnWindowFocus: true,
   });
 
   const { data: clientes = [] } = useQuery({
