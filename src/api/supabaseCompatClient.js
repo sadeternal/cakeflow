@@ -927,6 +927,19 @@ const authApi = {
     return safeJson(response);
   },
 
+  async resetPassword(email) {
+    const redirectTo = `${window.location.origin}/auth?mode=login`;
+    const response = await fetch(`${supabaseUrl}/auth/v1/recover`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: supabaseAnonKey
+      },
+      body: JSON.stringify({ email: email.trim(), gotrue_meta_security: {}, redirect_to: redirectTo })
+    });
+    await ensureOk(response);
+  },
+
   async logout(redirectTo) {
     try {
       await fetch(`${supabaseUrl}/auth/v1/logout`, {

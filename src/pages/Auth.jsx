@@ -7,6 +7,13 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription
+} from '@/components/ui/dialog';
 import { Lock, Mail } from 'lucide-react';
 import { createPageUrl } from '@/utils';
 import googleIcon from '@/assets/google.svg';
@@ -45,6 +52,9 @@ export default function AuthPage() {
     password: '',
     confirmPassword: ''
   });
+  const [forgotPasswordOpen, setForgotPasswordOpen] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [isSendingReset, setIsSendingReset] = useState(false);
 
   const redirectTo = useMemo(() => readRedirect(location.search), [location.search]);
   const forceAuth = useMemo(() => new URLSearchParams(location.search).get('force') === '1', [location.search]);
@@ -180,6 +190,28 @@ export default function AuthPage() {
     appClient.auth.signInWithGoogle(redirectTo);
   };
 
+  const handleForgotPassword = async (event) => {
+    event.preventDefault();
+    setIsSendingReset(true);
+    try {
+      await appClient.auth.resetPassword(forgotEmail);
+      toast({
+        title: 'E-mail enviado',
+        description: 'Verifique sua caixa de entrada para redefinir sua senha.'
+      });
+      setForgotPasswordOpen(false);
+      setForgotEmail('');
+    } catch {
+      toast({
+        title: 'Erro ao enviar e-mail',
+        description: 'Não foi possível enviar o link de recuperação. Tente novamente.',
+        variant: 'destructive'
+      });
+    } finally {
+      setIsSendingReset(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#f2f0f3] px-4 py-8 sm:py-10">
       <div className="mx-auto flex min-h-[calc(100vh-4rem)] w-full max-w-[520px] flex-col items-center justify-center gap-7 sm:min-h-[calc(100vh-5rem)]">
@@ -313,12 +345,10 @@ export default function AuthPage() {
                   <button
                     type="button"
                     className="text-xs font-medium text-[#ef2b63] hover:text-[#d92358]"
-                    onClick={() =>
-                      toast({
-                        title: 'Recuperação de senha',
-                        description: 'Solicite o reset de senha pelo suporte enquanto finalizamos este fluxo.'
-                      })
-                    }
+                    onClick={() => {
+                      setForgotEmail(loginData.email);
+                      setForgotPasswordOpen(true);
+                    }}
                   >
                     Esqueci minha senha
                   </button>
@@ -357,6 +387,46 @@ export default function AuthPage() {
           </CardContent>
         </Card>
       </div>
+
+      <Dialog open={forgotPasswordOpen} onOpenChange={setForgotPasswordOpen}>
+        <DialogContent className="sm:max-w-[400px] rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-[18px] font-semibold text-[#2d2d32]">
+              Recuperar senha
+            </DialogTitle>
+            <DialogDescription className="text-[14px] text-[#5a5d65]">
+              Informe seu e-mail e enviaremos um link para redefinir sua senha.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleForgotPassword} className="space-y-4 pt-1">
+            <div className="space-y-1.5">
+              <Label htmlFor="forgot-email" className="text-[14px] font-medium text-[#3b3b40]">
+                E-mail
+              </Label>
+              <div className="relative">
+                <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9498a3]" />
+                <Input
+                  id="forgot-email"
+                  type="email"
+                  autoComplete="email"
+                  required
+                  className="h-11 rounded-xl border-[#e2e5ea] bg-[#e9edf1] pl-10 text-[15px] placeholder:text-[#9fa4ac]"
+                  placeholder="exemplo@mail.com"
+                  value={forgotEmail}
+                  onChange={(e) => setForgotEmail(e.target.value)}
+                />
+              </div>
+            </div>
+            <Button
+              type="submit"
+              disabled={isSendingReset}
+              className="h-11 w-full rounded-xl bg-[#ef2b63] text-[15px] font-semibold text-white hover:bg-[#dc2458]"
+            >
+              {isSendingReset ? 'Enviando...' : 'Enviar link de recuperação'}
+            </Button>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
