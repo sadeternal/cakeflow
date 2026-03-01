@@ -107,7 +107,7 @@ export default function Financeiro() {
       pago: false,
     }),
     onSuccess: () => {
-      queryClient.invalidateQueries(['contasPagar']);
+      queryClient.invalidateQueries({ queryKey: ['contasPagar'] });
       setShowContaPagarForm(false);
       setContaPagarForm({
         descricao: '',
@@ -127,7 +127,7 @@ export default function Financeiro() {
       recebido: false,
     }),
     onSuccess: () => {
-      queryClient.invalidateQueries(['contasReceber']);
+      queryClient.invalidateQueries({ queryKey: ['contasReceber'] });
       setShowContaReceberForm(false);
       setContaReceberForm({
         cliente_nome: '',
@@ -144,7 +144,7 @@ export default function Financeiro() {
       pago, 
       data_pagamento: pago ? format(new Date(), 'yyyy-MM-dd') : null 
     }),
-    onSuccess: () => queryClient.invalidateQueries(['contasPagar']),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['contasPagar'] }),
   });
 
   const marcarRecebido = useMutation({
@@ -152,17 +152,17 @@ export default function Financeiro() {
       recebido, 
       data_recebimento: recebido ? format(new Date(), 'yyyy-MM-dd') : null 
     }),
-    onSuccess: () => queryClient.invalidateQueries(['contasReceber']),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['contasReceber'] }),
   });
 
   const deleteContaPagar = useMutation({
     mutationFn: (id) => appClient.entities.ContaPagar.delete(id),
-    onSuccess: () => queryClient.invalidateQueries(['contasPagar']),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['contasPagar'] }),
   });
 
   const deleteContaReceber = useMutation({
     mutationFn: (id) => appClient.entities.ContaReceber.delete(id),
-    onSuccess: () => queryClient.invalidateQueries(['contasReceber']),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['contasReceber'] }),
   });
 
   // Cálculos

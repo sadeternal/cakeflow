@@ -145,7 +145,7 @@ export default function Clientes() {
   const deleteMutation = useMutation({
     mutationFn: (id) => appClient.entities.Cliente.delete(id),
     onSuccess: () => {
-      queryClient.invalidateQueries(['clientes']);
+      queryClient.invalidateQueries({ queryKey: ['clientes'] });
       setShowDeleteDialog(false);
       setClienteToDelete(null);
     },

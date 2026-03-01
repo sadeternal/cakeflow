@@ -58,7 +58,7 @@ export default function PedidoPublico({ confeitaria, onClose }) {
         key: s.key,
         title: s.label || s.title
       }));
-  }, [confeitaria.etapas_pedido]);
+  }, [confeitaria?.etapas_pedido]);
 
   const [currentStep, setCurrentStep] = useState(1);
   const [enviandoPedido, setEnviandoPedido] = useState(false);
@@ -124,52 +124,60 @@ export default function PedidoPublico({ confeitaria, onClose }) {
 
   // Data queries
   const { data: tamanhos = [] } = useQuery({
-    queryKey: ['tamanhos', confeitaria.id],
+    queryKey: ['tamanhos', confeitaria?.id],
     queryFn: () => appClient.entities.Tamanho.filter({ confeitaria_id: confeitaria.id, ativo: true }),
+    enabled: !!confeitaria?.id,
   });
 
   const { data: massas = [] } = useQuery({
-    queryKey: ['massas', confeitaria.id],
+    queryKey: ['massas', confeitaria?.id],
     queryFn: () => appClient.entities.Massa.filter({ confeitaria_id: confeitaria.id, ativo: true }),
+    enabled: !!confeitaria?.id,
   });
 
   const { data: recheios = [] } = useQuery({
-    queryKey: ['recheios', confeitaria.id],
+    queryKey: ['recheios', confeitaria?.id],
     queryFn: () => appClient.entities.Recheio.filter({ confeitaria_id: confeitaria.id, ativo: true }),
+    enabled: !!confeitaria?.id,
   });
 
   const { data: coberturas = [] } = useQuery({
-    queryKey: ['coberturas', confeitaria.id],
+    queryKey: ['coberturas', confeitaria?.id],
     queryFn: () => appClient.entities.Cobertura.filter({ confeitaria_id: confeitaria.id, ativo: true }),
+    enabled: !!confeitaria?.id,
   });
 
   const { data: extras = [] } = useQuery({
-    queryKey: ['extras', confeitaria.id],
+    queryKey: ['extras', confeitaria?.id],
     queryFn: () => appClient.entities.Extra.filter({ confeitaria_id: confeitaria.id, ativo: true }),
+    enabled: !!confeitaria?.id,
   });
 
   const { data: doces = [] } = useQuery({
-    queryKey: ['doces-pedido', confeitaria.id],
+    queryKey: ['doces-pedido', confeitaria?.id],
     queryFn: () => appClient.entities.Doce.filter({
       confeitaria_id: confeitaria.id,
       ativo: true
     }),
+    enabled: !!confeitaria?.id,
   });
 
   const { data: salgados = [] } = useQuery({
-    queryKey: ['salgados-pedido', confeitaria.id],
+    queryKey: ['salgados-pedido', confeitaria?.id],
     queryFn: () => appClient.entities.Salgado.filter({
       confeitaria_id: confeitaria.id,
       ativo: true
     }),
+    enabled: !!confeitaria?.id,
   });
 
   const { data: formasPagamento = [] } = useQuery({
-    queryKey: ['formasPagamento', confeitaria.id],
+    queryKey: ['formasPagamento', confeitaria?.id],
     queryFn: () => appClient.entities.FormaPagamento.filter({
       confeitaria_id: confeitaria.id,
       ativo: true
     }),
+    enabled: !!confeitaria?.id,
   });
 
   // Calculate totals
@@ -241,7 +249,7 @@ export default function PedidoPublico({ confeitaria, onClose }) {
     }
 
     mensagem += `\n*Entrega:*\n`;
-    mensagem += `- Data: ${format(parseISO(pedido.data_entrega), "dd/MM/yyyy")}\n`;
+    mensagem += `- Data: ${pedido.data_entrega ? format(parseISO(pedido.data_entrega), "dd/MM/yyyy") : 'Não informada'}\n`;
     if (pedido.horario_entrega) {
       mensagem += `- Horário: ${pedido.horario_entrega}\n`;
     }
@@ -286,8 +294,8 @@ export default function PedidoPublico({ confeitaria, onClose }) {
       });
 
       // Invalidar queries para atualizar lista de pedidos em tempo real
-      queryClient.invalidateQueries(['pedidos']);
-      queryClient.invalidateQueries(['contas-receber']);
+      queryClient.invalidateQueries({ queryKey: ['pedidos'] });
+      queryClient.invalidateQueries({ queryKey: ['contas-receber'] });
 
       setPedidoEnviado(true);
     } catch (error) {

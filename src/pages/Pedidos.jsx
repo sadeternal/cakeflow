@@ -74,6 +74,12 @@ export default function Pedidos() {
     }
   }, [user]);
 
+  const { data: pedidos = [], isLoading } = useQuery({
+    queryKey: ['pedidos', user?.confeitaria_id],
+    queryFn: () => appClient.entities.Pedido.filter({ confeitaria_id: user.confeitaria_id }, '-created_date'),
+    enabled: !!user?.confeitaria_id,
+  });
+
   // Check URL for pedido ID
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -82,25 +88,19 @@ export default function Pedidos() {
       const pedido = pedidos.find(p => p.id === pedidoId);
       if (pedido) setSelectedPedido(pedido);
     }
-  }, []);
-
-  const { data: pedidos = [], isLoading } = useQuery({
-    queryKey: ['pedidos', user?.confeitaria_id],
-    queryFn: () => appClient.entities.Pedido.filter({ confeitaria_id: user.confeitaria_id }, '-created_date'),
-    enabled: !!user?.confeitaria_id,
-  });
+  }, [pedidos]);
 
   const updateStatusMutation = useMutation({
     mutationFn: ({ id, status }) => appClient.entities.Pedido.update(id, { status }),
     onSuccess: () => {
-      queryClient.invalidateQueries(['pedidos']);
+      queryClient.invalidateQueries({ queryKey: ['pedidos'] });
     },
   });
 
   const deleteMutation = useMutation({
     mutationFn: (id) => appClient.entities.Pedido.delete(id),
     onSuccess: () => {
-      queryClient.invalidateQueries(['pedidos']);
+      queryClient.invalidateQueries({ queryKey: ['pedidos'] });
       setShowDeleteDialog(false);
       setPedidoToDelete(null);
     },

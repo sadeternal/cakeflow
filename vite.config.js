@@ -3,7 +3,7 @@ import { defineConfig } from 'vite'
 import { fileURLToPath, URL } from 'node:url'
 
 export default defineConfig({
-  logLevel: 'error',
+  logLevel: 'info',
   plugins: [react()],
   resolve: {
     alias: {

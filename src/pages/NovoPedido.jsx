@@ -148,7 +148,7 @@ export default function NovoPedido() {
       confeitaria_id: user.confeitaria_id,
     }),
     onSuccess: (client) => {
-      queryClient.invalidateQueries(['clientes']);
+      queryClient.invalidateQueries({ queryKey: ['clientes'] });
       setPedido({
         ...pedido,
         cliente_id: client.id,
@@ -162,27 +162,10 @@ export default function NovoPedido() {
 
   const createPedidoMutation = useMutation({
     mutationFn: async () => {
-      // Buscar todos os pedidos da confeitaria para determinar o próximo número
-      const todosPedidos = await appClient.entities.Pedido.filter({ confeitaria_id: user.confeitaria_id });
-      
-      // Encontrar o maior número de pedido existente (apenas números puros, ignorar formatos antigos)
-      let proximoNumero = 1;
-      if (todosPedidos.length > 0) {
-        const numeros = todosPedidos
-          .filter(p => p.numero && /^\d+$/.test(p.numero)) // Apenas números puros
-          .map(p => parseInt(p.numero))
-          .filter(n => !isNaN(n));
-        
-        if (numeros.length > 0) {
-          const maiorNumero = Math.max(...numeros);
-          proximoNumero = maiorNumero + 1;
-        }
-      }
-      
       return appClient.entities.Pedido.create({
         ...pedido,
         confeitaria_id: user.confeitaria_id,
-        numero: proximoNumero.toString(),
+        numero: null, // o trigger assign_pedido_numero no banco atribui o número automaticamente
         status: 'orcamento',
         tipo: 'personalizado',
       });

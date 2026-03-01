@@ -116,7 +116,7 @@ export default function OnboardingChecklist({ user, confeitaria }) {
   const updateUserMutation = useMutation({
     mutationFn: (data) => appClient.auth.updateMe(data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['user']);
+      queryClient.invalidateQueries({ queryKey: ['user'] });
     }
   });
 

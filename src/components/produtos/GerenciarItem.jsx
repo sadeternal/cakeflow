@@ -75,7 +75,7 @@ export default function GerenciarItem({
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries([type]);
+      queryClient.invalidateQueries({ queryKey: [type] });
       closeForm();
     },
   });
@@ -83,14 +83,14 @@ export default function GerenciarItem({
   const deleteMutation = useMutation({
     mutationFn: (id) => getEntity().delete(id),
     onSuccess: () => {
-      queryClient.invalidateQueries([type]);
+      queryClient.invalidateQueries({ queryKey: [type] });
       setItemToDelete(null);
     },
   });
 
   const toggleActive = useMutation({
     mutationFn: ({ id, ativo }) => getEntity().update(id, { ativo }),
-    onSuccess: () => queryClient.invalidateQueries([type]),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: [type] }),
   });
 
   const openForm = (item = null) => {

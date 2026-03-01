@@ -80,7 +80,7 @@ export default function ProdutosProntosTab({ user }) {
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries(['produtos']);
+      queryClient.invalidateQueries({ queryKey: ['produtos'] });
       toast({
         title: editingProduto ? 'Produto atualizado' : 'Produto criado',
         description: 'As informações do produto foram salvas com sucesso.'
@@ -99,7 +99,7 @@ export default function ProdutosProntosTab({ user }) {
   const deleteMutation = useMutation({
     mutationFn: (id) => appClient.entities.Produto.delete(id),
     onSuccess: () => {
-      queryClient.invalidateQueries(['produtos']);
+      queryClient.invalidateQueries({ queryKey: ['produtos'] });
       setShowDeleteDialog(false);
       setProdutoToDelete(null);
     },
@@ -107,7 +107,7 @@ export default function ProdutosProntosTab({ user }) {
 
   const toggleDisponivel = useMutation({
     mutationFn: ({ id, disponivel }) => appClient.entities.Produto.update(id, { disponivel }),
-    onSuccess: () => queryClient.invalidateQueries(['produtos']),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['produtos'] }),
   });
 
   const closeForm = () => {

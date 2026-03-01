@@ -220,10 +220,10 @@ export default function Configuracoes() {
 
   const invalidateEntityQueries = (type) => {
     if (type === 'FormaPagamento') {
-      queryClient.invalidateQueries(['formasPagamento', user?.confeitaria_id]);
+      queryClient.invalidateQueries({ queryKey: ['formasPagamento', user?.confeitaria_id] });
       return;
     }
-    queryClient.invalidateQueries([`${type}s`]);
+    queryClient.invalidateQueries({ queryKey: [`${type}s`] });
   };
 
   const saveItem = useMutation({
@@ -890,7 +890,7 @@ export default function Configuracoes() {
             confeitaria={confeitaria}
             onUpdate={async () => {
               await refetchConfeitaria();
-              queryClient.invalidateQueries(['confeitaria']);
+              queryClient.invalidateQueries({ queryKey: ['confeitaria'] });
             }}
           />
         </TabsContent>
