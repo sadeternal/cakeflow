@@ -98,7 +98,6 @@ export default function Layout({ children, currentPageName }) {
   const navigation = [
   { name: 'Dashboard', href: 'Dashboard', icon: LayoutDashboard },
   { name: 'Pedidos', href: 'Pedidos', icon: ShoppingBag },
-  { name: 'Novo Pedido', href: 'NovoPedido', icon: Cake },
   { name: 'Clientes', href: 'Clientes', icon: Users },
   { name: 'Produtos', href: 'Produtos', icon: Package },
   { name: 'Financeiro', href: 'Financeiro', icon: DollarSign },
