@@ -98,6 +98,15 @@ export default function PedidoPublico({ confeitaria, onClose }) {
     valor_total: 0,
   });
 
+  // Dias bloqueados pela confeitaria (leitura pública permitida)
+  const { data: diasBloqueados = [] } = useQuery({
+    queryKey: ['dias-bloqueados-catalogo', confeitaria.id],
+    queryFn: () => appClient.entities.DiaBloqueado.filter({ confeitaria_id: confeitaria.id }),
+    enabled: !!confeitaria.id,
+  });
+  // Map: 'yyyy-MM-dd' → motivo (ou '' se sem motivo)
+  const diasBloqueadosMap = new Map(diasBloqueados.map(d => [d.data, d.motivo || '']));
+
   // Data queries
   const { data: tamanhos = [] } = useQuery({
     queryKey: ['tamanhos', confeitaria.id],
@@ -248,6 +257,8 @@ export default function PedidoPublico({ confeitaria, onClose }) {
       await appClient.functions.invokePublicRpc('catalog_create_pedido', {
         payload: {
           ...pedido,
+          tipo_entrega: pedido.data_entrega ? 'entrega' : 'retirada',
+          valor_itens: pedido.valor_tamanho + pedido.valor_massa + pedido.valor_recheios + pedido.valor_cobertura + pedido.valor_extras + pedido.valor_doces + pedido.valor_salgados,
           confeitaria_id: confeitaria.id,
           cliente_id: null,
           cliente_nome: cliente.nome,
@@ -283,7 +294,7 @@ export default function PedidoPublico({ confeitaria, onClose }) {
       case 'extras': return true;
       case 'doces': return true;
       case 'salgados': return true;
-      case 'entrega': return pedido.data_entrega;
+      case 'entrega': return pedido.data_entrega && !diasBloqueadosMap.has(pedido.data_entrega);
       case 'dados': return cliente.nome && cliente.telefone;
       case 'pagamento': return pedido.forma_pagamento;
       default: return true;
@@ -953,8 +964,13 @@ export default function PedidoPublico({ confeitaria, onClose }) {
                   value={pedido.data_entrega}
                   onChange={(e) => setPedido({ ...pedido, data_entrega: e.target.value })}
                   min={format(new Date(), 'yyyy-MM-dd')}
-                  className="mt-1"
+                  className={`mt-1 ${pedido.data_entrega && diasBloqueadosMap.has(pedido.data_entrega) ? 'border-red-400 focus-visible:ring-red-400' : ''}`}
                 />
+                {pedido.data_entrega && diasBloqueadosMap.has(pedido.data_entrega) && (
+                  <p className="mt-1.5 text-sm text-red-500 font-medium">
+                    {diasBloqueadosMap.get(pedido.data_entrega) || 'Data não está disponível!'}
+                  </p>
+                )}
               </div>
 
               <div>
@@ -1018,22 +1034,41 @@ export default function PedidoPublico({ confeitaria, onClose }) {
                 onValueChange={(value) => setPedido({ ...pedido, forma_pagamento: value })}
                 className="grid gap-3"
               >
-                {formasPagamento.map((forma) => (
-                  <label
-                    key={forma.id}
-                    className={`flex items-center gap-3 p-4 rounded-xl cursor-pointer transition-colors ${pedido.forma_pagamento === forma.nome
-                      ? 'border-2'
-                      : 'bg-gray-50 hover:bg-gray-100 border-2 border-transparent'
-                      }`}
-                    style={{
-                      backgroundColor: pedido.forma_pagamento === forma.nome ? `${corPrincipal}10` : undefined,
-                      borderColor: pedido.forma_pagamento === forma.nome ? corPrincipal : undefined,
-                    }}
-                  >
-                    <RadioGroupItem value={forma.nome} />
-                    <span className="font-medium text-gray-900">{forma.nome}</span>
-                  </label>
-                ))}
+                {formasPagamento.length > 0 ? (
+                  formasPagamento.map((forma) => (
+                    <label
+                      key={forma.id}
+                      className={`flex items-center gap-3 p-4 rounded-xl cursor-pointer transition-colors ${pedido.forma_pagamento === forma.nome
+                        ? 'border-2'
+                        : 'bg-gray-50 hover:bg-gray-100 border-2 border-transparent'
+                        }`}
+                      style={{
+                        backgroundColor: pedido.forma_pagamento === forma.nome ? `${corPrincipal}10` : undefined,
+                        borderColor: pedido.forma_pagamento === forma.nome ? corPrincipal : undefined,
+                      }}
+                    >
+                      <RadioGroupItem value={forma.nome} />
+                      <span className="font-medium text-gray-900">{forma.nome}</span>
+                    </label>
+                  ))
+                ) : (
+                  ['Pix', 'Cartão', 'Dinheiro'].map((forma) => (
+                    <label
+                      key={forma}
+                      className={`flex items-center gap-3 p-4 rounded-xl cursor-pointer transition-colors ${pedido.forma_pagamento === forma
+                        ? 'border-2'
+                        : 'bg-gray-50 hover:bg-gray-100 border-2 border-transparent'
+                        }`}
+                      style={{
+                        backgroundColor: pedido.forma_pagamento === forma ? `${corPrincipal}10` : undefined,
+                        borderColor: pedido.forma_pagamento === forma ? corPrincipal : undefined,
+                      }}
+                    >
+                      <RadioGroupItem value={forma} />
+                      <span className="font-medium text-gray-900">{forma}</span>
+                    </label>
+                  ))
+                )}
               </RadioGroup>
             </div>
           )}

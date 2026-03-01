@@ -101,6 +101,7 @@ const ENTITY_TABLE_MAP = {
   Doce: 'doces',
   Salgado: 'salgados',
   AcessoCatalogo: 'acessos_catalogo',
+  DiaBloqueado: 'dias_bloqueados',
   User: 'profiles'
 };
 
