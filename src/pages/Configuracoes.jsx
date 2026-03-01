@@ -65,6 +65,8 @@ export default function Configuracoes() {
     taxa_delivery: 0,
     receber_pedidos_whatsapp: true,
     exibir_pedido_personalizado: true,
+    frase_pedido_personalizado: 'Monte seu Bolo Personalizado',
+    limite_pedidos_personalizados_diarios: '',
     horario_funcionamento: { inicio: '', fim: '' },
     dias_funcionamento: [],
     etapas_pedido: [],
@@ -105,6 +107,7 @@ export default function Configuracoes() {
           receber_pedidos_whatsapp: conf.receber_pedidos_whatsapp !== false,
           exibir_pedido_personalizado: conf.exibir_pedido_personalizado !== false,
           frase_pedido_personalizado: conf.frase_pedido_personalizado || 'Monte seu Bolo Personalizado',
+          limite_pedidos_personalizados_diarios: conf.limite_pedidos_personalizados_diarios ?? '',
           horario_funcionamento: conf.horario_funcionamento || { inicio: '', fim: '' },
           dias_funcionamento: conf.dias_funcionamento || [],
           etapas_pedido: Array.isArray(conf.etapas_pedido) && conf.etapas_pedido.length > 0
@@ -146,6 +149,9 @@ export default function Configuracoes() {
     receber_pedidos_whatsapp: !!confeitariaForm.receber_pedidos_whatsapp,
     exibir_pedido_personalizado: !!confeitariaForm.exibir_pedido_personalizado,
     frase_pedido_personalizado: confeitariaForm.frase_pedido_personalizado || '',
+    limite_pedidos_personalizados_diarios: confeitariaForm.limite_pedidos_personalizados_diarios !== ''
+      ? Number(confeitariaForm.limite_pedidos_personalizados_diarios) || null
+      : null,
     horario_funcionamento: confeitariaForm.horario_funcionamento || { inicio: '', fim: '' },
     dias_funcionamento: Array.isArray(confeitariaForm.dias_funcionamento)
       ? confeitariaForm.dias_funcionamento
@@ -764,16 +770,35 @@ export default function Configuracoes() {
                         />
                       </div>
                       {confeitariaForm.exibir_pedido_personalizado && (
-                        <div>
-                          <Label>Frase do Pedido Personalizado</Label>
-                          <Input
-                            value={confeitariaForm.frase_pedido_personalizado}
-                            onChange={(e) => setConfeitariaForm({ ...confeitariaForm, frase_pedido_personalizado: e.target.value })}
-                            placeholder="Monte seu Bolo Personalizado"
-                          />
-                          <p className="text-xs text-gray-500 mt-2">
-                            Esta frase será exibida no botão de pedido personalizado no catálogo
-                          </p>
+                        <div className="space-y-4">
+                          <div>
+                            <Label>Frase do Pedido Personalizado</Label>
+                            <Input
+                              value={confeitariaForm.frase_pedido_personalizado}
+                              onChange={(e) => setConfeitariaForm({ ...confeitariaForm, frase_pedido_personalizado: e.target.value })}
+                              placeholder="Monte seu Bolo Personalizado"
+                            />
+                            <p className="text-xs text-gray-500 mt-2">
+                              Esta frase será exibida no botão de pedido personalizado no catálogo
+                            </p>
+                          </div>
+                          <div>
+                            <Label>Limite de pedidos personalizados por dia</Label>
+                            <Input
+                              type="number"
+                              min="1"
+                              className="mt-1"
+                              value={confeitariaForm.limite_pedidos_personalizados_diarios}
+                              onChange={(e) => setConfeitariaForm({
+                                ...confeitariaForm,
+                                limite_pedidos_personalizados_diarios: e.target.value,
+                              })}
+                              placeholder="Sem limite"
+                            />
+                            <p className="text-xs text-gray-500 mt-2">
+                              Quando o limite for atingido, o cliente não poderá escolher aquela data no catálogo. Deixe em branco para sem limite.
+                            </p>
+                          </div>
                         </div>
                       )}
                     </div>
