@@ -11,6 +11,8 @@ import {
   Plus,
   Trash2,
   Calendar,
+  CalendarDays,
+  List,
   ChevronDown,
   MessageCircle,
   ArrowRight
@@ -40,7 +42,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Link } from 'react-router-dom';
+import { cn } from '@/lib/utils';
 import PedidoDetalhes from '@/components/pedidos/PedidoDetalhes';
+import CalendarioPedidos from '@/components/pedidos/CalendarioPedidos';
+import DiaDoPedidoDialog from '@/components/pedidos/DiaDoPedidoDialog';
 
 const statusConfig = {
   orcamento: { label: 'Orçamento', color: 'bg-gray-100 text-gray-700 border-gray-200', next: 'aprovado' },
@@ -58,6 +63,9 @@ export default function Pedidos() {
   const [selectedPedido, setSelectedPedido] = useState(null);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [pedidoToDelete, setPedidoToDelete] = useState(null);
+  const [vistaCalendario, setVistaCalendario] = useState(false);
+  const [mesCalendario, setMesCalendario] = useState(new Date());
+  const [pedidoDiaDialog, setPedidoDiaDialog] = useState(null);
   const queryClient = useQueryClient();
 
   useEffect(() => {
@@ -148,16 +156,30 @@ export default function Pedidos() {
             </SelectContent>
           </Select>
         </div>
-        <Link to={createPageUrl('NovoPedido')}>
-          <Button className="w-full sm:w-auto h-11 bg-gradient-to-r from-rose-500 to-rose-600 hover:from-rose-600 hover:to-rose-700 shadow-lg shadow-rose-200">
-            <Plus className="w-4 h-4 mr-2" />
-            Novo Pedido
+        <div className="flex items-center gap-2">
+          <Button
+            variant={vistaCalendario ? 'default' : 'outline'}
+            size="icon"
+            className={cn(
+              'h-11 w-11 shrink-0',
+              vistaCalendario && 'bg-rose-500 hover:bg-rose-600 border-rose-500 text-white'
+            )}
+            onClick={() => setVistaCalendario(v => !v)}
+            title={vistaCalendario ? 'Ver lista' : 'Ver calendário'}
+          >
+            {vistaCalendario ? <List className="w-5 h-5" /> : <CalendarDays className="w-5 h-5" />}
           </Button>
-        </Link>
+          <Link to={createPageUrl('NovoPedido')}>
+            <Button className="w-full sm:w-auto h-11 bg-gradient-to-r from-rose-500 to-rose-600 hover:from-rose-600 hover:to-rose-700 shadow-lg shadow-rose-200">
+              <Plus className="w-4 h-4 mr-2" />
+              Novo Pedido
+            </Button>
+          </Link>
+        </div>
       </div>
 
-      {/* Status tabs */}
-      <div className="flex gap-2 overflow-x-auto pb-2">
+      {/* Status tabs — oculto em vista calendário */}
+      {!vistaCalendario && <div className="flex gap-2 overflow-x-auto pb-2">
         <Button
           variant={statusFilter === 'todos' ? 'default' : 'outline'}
           size="sm"
@@ -180,10 +202,23 @@ export default function Pedidos() {
             </Button>
           );
         })}
-      </div>
+      </div>}
 
-      {/* Pedidos List */}
-      <Card className="border-0 shadow-lg shadow-gray-100/50">
+      {/* Vista Calendário */}
+      {vistaCalendario && (
+        <CalendarioPedidos
+          pedidos={pedidos}
+          mes={mesCalendario}
+          onMesChange={setMesCalendario}
+          confeitariaId={user.confeitaria_id}
+          onPedidoClick={(p) => setSelectedPedido(p)}
+          onDeletePedido={(p) => { setPedidoToDelete(p); setShowDeleteDialog(true); }}
+          onDiaClick={(dataStr) => setPedidoDiaDialog(dataStr)}
+        />
+      )}
+
+      {/* Pedidos List — oculto em vista calendário */}
+      {!vistaCalendario && <Card className="border-0 shadow-lg shadow-gray-100/50">
         <CardContent className="p-0">
           {isLoading ? (
             <div className="p-8 text-center text-gray-500">Carregando...</div>
@@ -320,7 +355,19 @@ export default function Pedidos() {
             </div>
           )}
         </CardContent>
-      </Card>
+      </Card>}
+
+      {/* Dialog de detalhe do dia no calendário */}
+      {pedidoDiaDialog && (
+        <DiaDoPedidoDialog
+          dataStr={pedidoDiaDialog}
+          pedidos={pedidos}
+          onClose={() => setPedidoDiaDialog(null)}
+          onEdit={(p) => { setPedidoDiaDialog(null); setSelectedPedido(p); }}
+          onDelete={(p) => { setPedidoDiaDialog(null); setPedidoToDelete(p); setShowDeleteDialog(true); }}
+          statusConfig={statusConfig}
+        />
+      )}
 
       {/* Detalhes Dialog */}
       {selectedPedido && (
