@@ -48,22 +48,16 @@ serve(async (req) => {
       throw new HttpError(400, 'Confeitaria sem e-mail do proprietário');
     }
 
+    // FIRSTNAME e SMS são atributos padrão do Brevo — não precisam ser criados manualmente
     const attributes: Record<string, string> = {};
 
     if (confeitaria.nome) {
-      attributes['NOME'] = String(confeitaria.nome);
+      attributes['FIRSTNAME'] = String(confeitaria.nome);
     }
     if (confeitaria.telefone) {
-      attributes['SMS'] = String(confeitaria.telefone).replace(/\D/g, '');
-    }
-    if (confeitaria.instagram) {
-      attributes['INSTAGRAM'] = String(confeitaria.instagram);
-    }
-    if (confeitaria.como_conheceu) {
-      attributes['COMO_CONHECEU'] = String(confeitaria.como_conheceu);
-    }
-    if (confeitaria.status_assinatura) {
-      attributes['STATUS_ASSINATURA'] = String(confeitaria.status_assinatura);
+      // Brevo espera número com código do país: 5511999999999
+      const digits = String(confeitaria.telefone).replace(/\D/g, '');
+      attributes['SMS'] = digits.startsWith('55') ? digits : `55${digits}`;
     }
 
     const brevoPayload: Record<string, unknown> = {
