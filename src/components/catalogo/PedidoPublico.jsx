@@ -107,6 +107,21 @@ export default function PedidoPublico({ confeitaria, onClose }) {
   // Map: 'yyyy-MM-dd' → motivo (ou '' se sem motivo)
   const diasBloqueadosMap = new Map(diasBloqueados.map(d => [d.data, d.motivo || '']));
 
+  // Contagem de pedidos personalizados na data selecionada (para validar limite diário)
+  const limite = confeitaria.limite_pedidos_personalizados_diarios;
+  const { data: contadorDia = 0 } = useQuery({
+    queryKey: ['pedidos-count-dia', confeitaria.id, pedido.data_entrega],
+    queryFn: async () => {
+      const { data } = await appClient.functions.invokePublicRpc('contar_pedidos_personalizados', {
+        p_confeitaria_id: confeitaria.id,
+        p_data_entrega: pedido.data_entrega,
+      });
+      return data ?? 0;
+    },
+    enabled: !!pedido.data_entrega && !!limite,
+  });
+  const limiteAtingido = !!limite && contadorDia >= limite;
+
   // Data queries
   const { data: tamanhos = [] } = useQuery({
     queryKey: ['tamanhos', confeitaria.id],
@@ -294,7 +309,7 @@ export default function PedidoPublico({ confeitaria, onClose }) {
       case 'extras': return true;
       case 'doces': return true;
       case 'salgados': return true;
-      case 'entrega': return pedido.data_entrega && !diasBloqueadosMap.has(pedido.data_entrega);
+      case 'entrega': return pedido.data_entrega && !diasBloqueadosMap.has(pedido.data_entrega) && !limiteAtingido;
       case 'dados': return cliente.nome && cliente.telefone;
       case 'pagamento': return pedido.forma_pagamento;
       default: return true;
@@ -964,11 +979,20 @@ export default function PedidoPublico({ confeitaria, onClose }) {
                   value={pedido.data_entrega}
                   onChange={(e) => setPedido({ ...pedido, data_entrega: e.target.value })}
                   min={format(new Date(), 'yyyy-MM-dd')}
-                  className={`mt-1 ${pedido.data_entrega && diasBloqueadosMap.has(pedido.data_entrega) ? 'border-red-400 focus-visible:ring-red-400' : ''}`}
+                  className={`mt-1 ${
+                    (pedido.data_entrega && diasBloqueadosMap.has(pedido.data_entrega)) || limiteAtingido
+                      ? 'border-red-400 focus-visible:ring-red-400'
+                      : ''
+                  }`}
                 />
                 {pedido.data_entrega && diasBloqueadosMap.has(pedido.data_entrega) && (
                   <p className="mt-1.5 text-sm text-red-500 font-medium">
                     {diasBloqueadosMap.get(pedido.data_entrega) || 'Data não está disponível!'}
+                  </p>
+                )}
+                {pedido.data_entrega && !diasBloqueadosMap.has(pedido.data_entrega) && limiteAtingido && (
+                  <p className="mt-1.5 text-sm text-amber-600 font-medium">
+                    A quantidade de pedidos para este dia foi atingida, favor escolher outra data.
                   </p>
                 )}
               </div>
