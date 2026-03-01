@@ -32,7 +32,9 @@ import {
   AlertTriangle,
   Copy,
   Search,
-  Phone
+  Phone,
+  Mail,
+  Loader2
 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 
@@ -68,6 +70,7 @@ export default function AdminPanel() {
   const { toast } = useToast();
   const [filtroStatus, setFiltroStatus] = useState('todos');
   const [busca, setBusca] = useState('');
+  const [enviandoBrevo, setEnviandoBrevo] = useState({});
 
   // Guard: apenas admin
   if (user && user.role !== 'admin') {
@@ -110,6 +113,18 @@ export default function AdminPanel() {
   const copiar = (texto, label) => {
     navigator.clipboard.writeText(texto);
     toast({ title: `${label} copiado!` });
+  };
+
+  const handleAddBrevo = async (confeitaria) => {
+    setEnviandoBrevo(prev => ({ ...prev, [confeitaria.id]: true }));
+    try {
+      await appClient.functions.invoke('addBrevoContact', { confeitaria_id: confeitaria.id });
+      toast({ title: 'Contato adicionado ao Brevo!' });
+    } catch {
+      toast({ title: 'Erro ao adicionar no Brevo', variant: 'destructive' });
+    } finally {
+      setEnviandoBrevo(prev => ({ ...prev, [confeitaria.id]: false }));
+    }
   };
 
   const formatarData = (iso) => {
@@ -179,18 +194,19 @@ export default function AdminPanel() {
                   <TableHead>Cadastro</TableHead>
                   <TableHead>Trial / Próx. pgto</TableHead>
                   <TableHead>Como conheceu</TableHead>
+                  <TableHead className="w-12"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {isLoading ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center py-12 text-gray-400">
+                    <TableCell colSpan={7} className="text-center py-12 text-gray-400">
                       Carregando...
                     </TableCell>
                   </TableRow>
                 ) : confeitariasFiltradas.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center py-12 text-gray-400">
+                    <TableCell colSpan={7} className="text-center py-12 text-gray-400">
                       Nenhuma confeitaria encontrada.
                     </TableCell>
                   </TableRow>
@@ -248,6 +264,19 @@ export default function AdminPanel() {
                         </TableCell>
                         <TableCell className="text-sm text-gray-500">
                           {c.como_conheceu || '—'}
+                        </TableCell>
+                        <TableCell>
+                          <button
+                            onClick={() => handleAddBrevo(c)}
+                            disabled={enviandoBrevo[c.id]}
+                            title="Adicionar ao Brevo"
+                            className="p-1.5 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors disabled:opacity-50"
+                          >
+                            {enviandoBrevo[c.id]
+                              ? <Loader2 className="w-4 h-4 animate-spin" />
+                              : <Mail className="w-4 h-4" />
+                            }
+                          </button>
                         </TableCell>
                       </TableRow>
                     );
