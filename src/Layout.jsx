@@ -19,7 +19,8 @@ import {
   ChevronDown,
   Store,
   TrendingUp,
-  MessageCircle } from
+  MessageCircle,
+  ShieldCheck } from
 'lucide-react';
 import TrialExpiredModal from '@/components/TrialExpiredModal';
 import {
@@ -41,13 +42,15 @@ const PAGE_TITLE_BY_ROUTE = {
   Configuracoes: 'Configuracoes',
   AjusteUsuario: 'Ajuste de Usuário',
   Suporte: 'Suporte',
-  Onboarding: 'Onboarding'
+  Onboarding: 'Onboarding',
+  AdminPanel: 'Painel Admin'
 };
 
 export default function Layout({ children, currentPageName }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { user } = useAuth();
   const [showTrialExpired, setShowTrialExpired] = useState(false);
+  const isAdminUser = user?.role === 'admin';
   const isPublicPage =
     currentPageName === 'Onboarding' ||
     currentPageName === 'Login' ||
@@ -65,7 +68,7 @@ export default function Layout({ children, currentPageName }) {
   }, [currentPageName]);
 
   useEffect(() => {
-    if (isPublicPage || !user) return;
+    if (isPublicPage || !user || isAdminUser) return;
 
     const loadSubscription = async () => {
       try {
@@ -78,7 +81,7 @@ export default function Layout({ children, currentPageName }) {
       }
     };
     loadSubscription();
-  }, [isPublicPage, user]);
+  }, [isPublicPage, user, isAdminUser]);
 
   const { data: confeitaria } = useQuery({
     queryKey: ['confeitaria', user?.confeitaria_id],
@@ -95,15 +98,18 @@ export default function Layout({ children, currentPageName }) {
     return <>{children}</>;
   }
 
-  const navigation = [
-  { name: 'Dashboard', href: 'Dashboard', icon: LayoutDashboard },
-  { name: 'Pedidos', href: 'Pedidos', icon: ShoppingBag },
-  { name: 'Clientes', href: 'Clientes', icon: Users },
-  { name: 'Produtos', href: 'Produtos', icon: Package },
-  { name: 'Financeiro', href: 'Financeiro', icon: DollarSign },
-  { name: 'Relatórios', href: 'Relatorios', icon: TrendingUp },
-  { name: 'Configurações', href: 'Configuracoes', icon: Settings },
-  { name: 'Suporte', href: 'Suporte', icon: MessageCircle }];
+  const navigation = isAdminUser
+    ? [{ name: 'Painel Admin', href: 'AdminPanel', icon: ShieldCheck }]
+    : [
+      { name: 'Dashboard', href: 'Dashboard', icon: LayoutDashboard },
+      { name: 'Pedidos', href: 'Pedidos', icon: ShoppingBag },
+      { name: 'Clientes', href: 'Clientes', icon: Users },
+      { name: 'Produtos', href: 'Produtos', icon: Package },
+      { name: 'Financeiro', href: 'Financeiro', icon: DollarSign },
+      { name: 'Relatórios', href: 'Relatorios', icon: TrendingUp },
+      { name: 'Configurações', href: 'Configuracoes', icon: Settings },
+      { name: 'Suporte', href: 'Suporte', icon: MessageCircle }
+    ];
 
 
   const handleLogout = () => {

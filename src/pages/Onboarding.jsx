@@ -61,6 +61,12 @@ export default function Onboarding() {
       const u = await appClient.auth.me();
       setUser(u);
 
+      // Admin vai direto para o painel administrativo (não tem confeitaria)
+      if (u.role === 'admin') {
+        window.location.href = createPageUrl('AdminPanel');
+        return;
+      }
+
       if (!u.confeitaria_id) {
         setLoading(false);
         return;
