@@ -63,6 +63,8 @@ export default function Pedidos() {
   const [selectedPedido, setSelectedPedido] = useState(null);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [pedidoToDelete, setPedidoToDelete] = useState(null);
+  const [dataInicio, setDataInicio] = useState('');
+  const [dataFim, setDataFim] = useState('');
   const [vistaCalendario, setVistaCalendario] = useState(false);
   const [mesCalendario, setMesCalendario] = useState(new Date());
   const [pedidoDiaDialog, setPedidoDiaDialog] = useState(null);
@@ -107,22 +109,22 @@ export default function Pedidos() {
   });
 
   const filteredPedidos = pedidos.filter(pedido => {
-    const matchesSearch = 
+    const matchesSearch =
       pedido.cliente_nome?.toLowerCase().includes(search.toLowerCase()) ||
       pedido.numero?.toLowerCase().includes(search.toLowerCase());
     const matchesStatus = statusFilter === 'todos' || pedido.status === statusFilter;
+    if (dataInicio && pedido.data_entrega && pedido.data_entrega.slice(0, 10) < dataInicio) return false;
+    if (dataFim && pedido.data_entrega && pedido.data_entrega.slice(0, 10) > dataFim) return false;
     return matchesSearch && matchesStatus;
   });
 
   const handleWhatsApp = (telefone, pedido) => {
-    let message = `Olá! Sobre seu pedido #${pedido.numero || pedido.id?.slice(-4)}`;
-    
-    if (pedido.tipo === 'personalizado' && pedido.tamanho_nome && pedido.massa_nome) {
-      message += ` - ${pedido.tamanho_nome} de ${pedido.massa_nome}`;
-    } else if (pedido.tipo === 'produto_pronto' && pedido.produtos_catalogo?.length > 0) {
-      message += ` - ${pedido.produtos_catalogo.map(p => `${p.quantidade}x ${p.nome}`).join(', ')}`;
-    }
-    
+    const nome = pedido.cliente_nome || '';
+    const num = pedido.numero || '';
+    const dataEntrega = pedido.data_entrega
+      ? format(parseISO(pedido.data_entrega), "dd/MM/yyyy", { locale: ptBR })
+      : '';
+    const message = `Olá ${nome}, seu pedido #${num} com data para ${dataEntrega}`;
     const phone = telefone?.replace(/\D/g, '');
     window.open(`https://wa.me/55${phone}?text=${encodeURIComponent(message)}`, '_blank');
   };
@@ -155,6 +157,29 @@ export default function Pedidos() {
               ))}
             </SelectContent>
           </Select>
+          <div className="flex items-center gap-2">
+            <input
+              type="date"
+              value={dataInicio}
+              onChange={e => setDataInicio(e.target.value)}
+              className="h-11 border border-gray-200 rounded-md px-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-rose-300"
+            />
+            <span className="text-gray-400 text-sm shrink-0">até</span>
+            <input
+              type="date"
+              value={dataFim}
+              onChange={e => setDataFim(e.target.value)}
+              className="h-11 border border-gray-200 rounded-md px-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-rose-300"
+            />
+            {(dataInicio || dataFim) && (
+              <button
+                onClick={() => { setDataInicio(''); setDataFim(''); }}
+                className="text-xs text-gray-400 hover:text-gray-600 shrink-0"
+              >
+                Limpar
+              </button>
+            )}
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <Button

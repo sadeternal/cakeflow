@@ -37,7 +37,12 @@ export default function PedidoDetalhes({ pedido, onClose, onStatusChange }) {
   const StatusIcon = statusConfig[pedido.status]?.icon || Clock;
 
   const handleWhatsApp = () => {
-    const message = `Olá! Sobre seu pedido #${pedido.numero || pedido.id?.slice(-4)} - ${pedido.tamanho_nome} de ${pedido.massa_nome}`;
+    const nome = pedido.cliente_nome || '';
+    const num = pedido.numero || '';
+    const dataEntrega = pedido.data_entrega
+      ? format(parseISO(pedido.data_entrega), "dd/MM/yyyy", { locale: ptBR })
+      : '';
+    const message = `Olá ${nome}, seu pedido #${num} com data para ${dataEntrega}`;
     const phone = pedido.cliente_telefone?.replace(/\D/g, '');
     window.open(`https://wa.me/55${phone}?text=${encodeURIComponent(message)}`, '_blank');
   };

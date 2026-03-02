@@ -1,9 +1,9 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { appClient } from '@/api/appClient';
 import { useQuery } from '@tanstack/react-query';
 import { createPageUrl } from '@/utils';
 import { useAuth } from '@/lib/AuthContext';
-import { startOfMonth, endOfMonth, subMonths, format, parseISO } from 'date-fns';
+import { startOfMonth, endOfMonth, subMonths, addMonths, format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
   TrendingUp,
@@ -14,7 +14,9 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   Eye,
-  Users
+  Users,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -40,6 +42,7 @@ const COLORS = ['#ec4899', '#f97316', '#8b5cf6', '#06b6d4', '#84cc16', '#f59e0b'
 
 export default function Relatorios() {
   const { user } = useAuth();
+  const [mesSelecionado, setMesSelecionado] = useState(new Date());
 
   useEffect(() => {
     if (user && !user.confeitaria_id) {
@@ -81,7 +84,7 @@ export default function Relatorios() {
   const getLast6MonthsData = () => {
     const months = [];
     for (let i = 5; i >= 0; i--) {
-      const date = subMonths(new Date(), i);
+      const date = subMonths(mesSelecionado, i);
       const inicio = startOfMonth(date);
       const fim = endOfMonth(date);
       
@@ -119,10 +122,9 @@ export default function Relatorios() {
     return months;
   };
 
-  // Mês atual
-  const mesAtual = new Date();
-  const inicioMesAtual = startOfMonth(mesAtual);
-  const fimMesAtual = endOfMonth(mesAtual);
+  // Mês selecionado
+  const inicioMesAtual = startOfMonth(mesSelecionado);
+  const fimMesAtual = endOfMonth(mesSelecionado);
 
   const pedidosMesAtual = pedidos.filter(p => {
     if (!p.created_date) return false;
@@ -148,7 +150,7 @@ export default function Relatorios() {
   const lucroAtual = receitasAtual - despesasAtual;
 
   // Mês anterior para comparação
-  const mesAnterior = subMonths(mesAtual, 1);
+  const mesAnterior = subMonths(mesSelecionado, 1);
   const inicioMesAnterior = startOfMonth(mesAnterior);
   const fimMesAnterior = endOfMonth(mesAnterior);
 
@@ -306,6 +308,25 @@ export default function Relatorios() {
         </TabsList>
 
         <TabsContent value="geral" className="space-y-6 mt-6">
+
+      {/* Seletor de mês */}
+      <div className="flex items-center gap-3">
+        <button
+          onClick={() => setMesSelecionado(m => subMonths(m, 1))}
+          className="p-1.5 rounded-lg border border-gray-200 hover:bg-gray-100 transition-colors"
+        >
+          <ChevronLeft className="w-4 h-4 text-gray-600" />
+        </button>
+        <span className="text-sm font-medium text-gray-700 w-40 text-center capitalize">
+          {format(mesSelecionado, "MMMM 'de' yyyy", { locale: ptBR })}
+        </span>
+        <button
+          onClick={() => setMesSelecionado(m => addMonths(m, 1))}
+          className="p-1.5 rounded-lg border border-gray-200 hover:bg-gray-100 transition-colors"
+        >
+          <ChevronRight className="w-4 h-4 text-gray-600" />
+        </button>
+      </div>
 
       {/* Cards de Resumo */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
