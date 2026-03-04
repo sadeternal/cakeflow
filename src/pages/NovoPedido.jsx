@@ -54,6 +54,9 @@ export default function NovoPedido() {
   const [showNewClientDialog, setShowNewClientDialog] = useState(false);
   const [clienteSearch, setClienteSearch] = useState('');
   const queryClient = useQueryClient();
+  const params = new URLSearchParams(window.location.search);
+  const editId = params.get('editId');
+  const isEditing = !!editId;
 
   const [pedido, setPedido] = useState({
     cliente_id: '',
@@ -141,6 +144,42 @@ export default function NovoPedido() {
     enabled: !!user?.confeitaria_id,
   });
 
+  const { data: pedidoParaEditar } = useQuery({
+    queryKey: ['pedido-editar', editId],
+    queryFn: async () => {
+      const list = await appClient.entities.Pedido.filter({ id: editId });
+      return list[0] || null;
+    },
+    enabled: isEditing,
+  });
+
+  useEffect(() => {
+    if (!pedidoParaEditar) return;
+    setPedido({
+      cliente_id:       pedidoParaEditar.cliente_id       || '',
+      cliente_nome:     pedidoParaEditar.cliente_nome     || '',
+      cliente_telefone: pedidoParaEditar.cliente_telefone || '',
+      tamanho_id:       pedidoParaEditar.tamanho_id       || '',
+      tamanho_nome:     pedidoParaEditar.tamanho_nome     || '',
+      massa_id:         pedidoParaEditar.massa_id         || '',
+      massa_nome:       pedidoParaEditar.massa_nome       || '',
+      recheios:         pedidoParaEditar.recheios         || [],
+      cobertura_id:     pedidoParaEditar.cobertura_id     || '',
+      cobertura_nome:   pedidoParaEditar.cobertura_nome   || '',
+      extras:           pedidoParaEditar.extras           || [],
+      data_entrega:     pedidoParaEditar.data_entrega     || '',
+      horario_entrega:  pedidoParaEditar.horario_entrega  || '',
+      observacoes:      pedidoParaEditar.observacoes      || '',
+      valor_tamanho:    pedidoParaEditar.valor_tamanho    || 0,
+      valor_massa:      pedidoParaEditar.valor_massa      || 0,
+      valor_recheios:   pedidoParaEditar.valor_recheios   || 0,
+      valor_cobertura:  pedidoParaEditar.valor_cobertura  || 0,
+      valor_extras:     pedidoParaEditar.valor_extras     || 0,
+      valor_urgencia:   pedidoParaEditar.valor_urgencia   || 0,
+      valor_total:      pedidoParaEditar.valor_total      || 0,
+    });
+  }, [pedidoParaEditar]);
+
   // Mutations
   const createClientMutation = useMutation({
     mutationFn: (data) => appClient.entities.Cliente.create({
@@ -162,6 +201,12 @@ export default function NovoPedido() {
 
   const createPedidoMutation = useMutation({
     mutationFn: async () => {
+      if (isEditing) {
+        return appClient.entities.Pedido.update(editId, {
+          ...pedido,
+          confeitaria_id: user.confeitaria_id,
+        });
+      }
       return appClient.entities.Pedido.create({
         ...pedido,
         confeitaria_id: user.confeitaria_id,
@@ -171,6 +216,7 @@ export default function NovoPedido() {
       });
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['pedidos'] });
       window.location.href = createPageUrl('Pedidos');
     },
   });
@@ -253,7 +299,9 @@ export default function NovoPedido() {
             className: "w-5 h-5 text-rose-500 mr-2"
           })}
           <h2 className="text-xl font-bold text-gray-900">
-            {steps[currentStep - 1].title}
+            {isEditing
+              ? `Editar Pedido #${pedidoParaEditar?.numero || ''} — ${steps[currentStep - 1].title}`
+              : steps[currentStep - 1].title}
           </h2>
         </div>
       </div>
@@ -791,7 +839,9 @@ export default function NovoPedido() {
             disabled={createPedidoMutation.isPending}
             className="bg-gradient-to-r from-rose-500 to-rose-600 hover:from-rose-600 hover:to-rose-700 shadow-lg shadow-rose-200"
           >
-            {createPedidoMutation.isPending ? 'Criando...' : 'Criar Pedido'}
+            {createPedidoMutation.isPending
+              ? (isEditing ? 'Salvando...' : 'Criando...')
+              : (isEditing ? 'Salvar Alterações' : 'Criar Pedido')}
           </Button>
         )}
       </div>

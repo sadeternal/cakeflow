@@ -1,6 +1,8 @@
 import React from 'react';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { Link } from 'react-router-dom';
+import { createPageUrl } from '@/utils';
 import {
   X,
   User,
@@ -11,7 +13,8 @@ import {
   MessageCircle,
   CheckCircle2,
   Package,
-  Truck } from
+  Truck,
+  Pencil } from
 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -310,6 +313,15 @@ export default function PedidoDetalhes({ pedido, onClose, onStatusChange }) {
           }
 
           {/* Actions */}
+          <div className="pt-3">
+            <Link to={`${createPageUrl('NovoPedido')}?editId=${pedido.id}`} className="w-full block">
+              <Button variant="outline" className="w-full">
+                <Pencil className="w-4 h-4 mr-2" />
+                Editar Pedido
+              </Button>
+            </Link>
+          </div>
+
           <div className="flex gap-3 pt-4 border-t">
             {pedido.status !== 'cancelado' && pedido.status !== 'entregue' &&
             <>

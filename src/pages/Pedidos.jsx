@@ -15,7 +15,8 @@ import {
   List,
   ChevronDown,
   MessageCircle,
-  ArrowRight
+  ArrowRight,
+  Pencil
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -359,6 +360,16 @@ export default function Pedidos() {
                                 Avançar para {statusConfig[statusConfig[pedido.status].next]?.label}
                               </DropdownMenuItem>
                             )}
+                            <DropdownMenuItem
+                              className="cursor-pointer"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                window.location.href = `${createPageUrl('NovoPedido')}?editId=${pedido.id}`;
+                              }}
+                            >
+                              <Pencil className="w-4 h-4 mr-2" />
+                              Editar
+                            </DropdownMenuItem>
                             <DropdownMenuItem
                               className="text-red-600 cursor-pointer hover:bg-red-50 hover:text-red-700 transition-colors"
                               onClick={(e) => {
