@@ -116,8 +116,22 @@ export default function Layout({ children, currentPageName }) {
     appClient.auth.logout(`${window.location.origin}/auth`);
   };
 
-  const handleSubscribe = () => {
-    window.location.href = `${createPageUrl('Configuracoes')}?tab=assinaturas`;
+  const [loadingCheckout, setLoadingCheckout] = useState(false);
+
+  const handleSubscribe = async () => {
+    setLoadingCheckout(true);
+    try {
+      const response = await appClient.functions.invoke('createCheckoutSession', {
+        confeitaria_id: user.confeitaria_id,
+      });
+      if (response?.data?.url) {
+        window.location.href = response.data.url;
+      }
+    } catch (e) {
+      console.error('Erro ao abrir checkout:', e);
+    } finally {
+      setLoadingCheckout(false);
+    }
   };
 
   // Se trial expirou, mostrar modal
@@ -126,6 +140,7 @@ export default function Layout({ children, currentPageName }) {
       <TrialExpiredModal
         onSubscribe={handleSubscribe}
         onLogout={handleLogout}
+        isLoading={loadingCheckout}
       />
     );
   }

@@ -1,9 +1,9 @@
 import React from 'react';
-import { AlertCircle, Settings } from 'lucide-react';
+import { AlertCircle, Settings, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
-export default function TrialExpiredModal({ onSubscribe, onLogout }) {
+export default function TrialExpiredModal({ onSubscribe, onLogout, isLoading }) {
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 backdrop-blur-sm">
       <Card className="w-full max-w-md border-0 shadow-2xl">
@@ -26,10 +26,14 @@ export default function TrialExpiredModal({ onSubscribe, onLogout }) {
           <div className="space-y-3">
             <Button
               onClick={onSubscribe}
+              disabled={isLoading}
               className="w-full bg-gradient-to-r from-rose-500 to-rose-600 h-11"
             >
-              <Settings className="w-4 h-4 mr-2" />
-              Ir para Assinaturas
+              {isLoading ? (
+                <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Aguarde...</>
+              ) : (
+                <><Settings className="w-4 h-4 mr-2" /> Ir para Assinaturas</>
+              )}
             </Button>
             <Button
               onClick={onLogout}
