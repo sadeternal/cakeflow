@@ -12,6 +12,8 @@ CREATE TABLE IF NOT EXISTS public.dias_bloqueados (
 
 ALTER TABLE public.dias_bloqueados ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "dias_bloqueados_rw_own" ON public.dias_bloqueados;
+
 CREATE POLICY "dias_bloqueados_rw_own"
   ON public.dias_bloqueados FOR ALL
   TO authenticated
