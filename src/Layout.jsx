@@ -20,7 +20,8 @@ import {
   Store,
   TrendingUp,
   MessageCircle,
-  ShieldCheck } from
+  ShieldCheck,
+  Ban } from
 'lucide-react';
 import TrialExpiredModal from '@/components/TrialExpiredModal';
 import SystemNotificationsBell from '@/components/notifications/SystemNotificationsBell';
@@ -143,6 +144,39 @@ export default function Layout({ children, currentPageName }) {
         onLogout={handleLogout}
         isLoading={loadingCheckout}
       />
+    );
+  }
+
+  // Se conta bloqueada, mostrar tela de bloqueio
+  if (!isAdminUser && confeitaria?.bloqueado) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-rose-50 via-white to-amber-50 flex items-center justify-center p-6">
+        <div className="max-w-md w-full bg-white rounded-2xl border border-red-100 shadow-xl p-8 text-center space-y-5">
+          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto">
+            <Ban className="w-8 h-8 text-red-500" />
+          </div>
+          <div className="space-y-2">
+            <h1 className="text-2xl font-bold text-gray-900">Conta bloqueada</h1>
+            <p className="text-gray-500 text-sm leading-relaxed">
+              O acesso à sua conta foi temporariamente suspenso. Entre em contato com o suporte para mais informações e para regularizar sua situação.
+            </p>
+          </div>
+          <a
+            href="https://wa.me/5575999501988"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center justify-center gap-2 w-full py-3 px-6 bg-rose-600 hover:bg-rose-700 text-white font-medium rounded-xl transition-colors"
+          >
+            Falar com o suporte
+          </a>
+          <button
+            onClick={handleLogout}
+            className="text-sm text-gray-400 hover:text-gray-600 underline"
+          >
+            Sair da conta
+          </button>
+        </div>
+      </div>
     );
   }
 

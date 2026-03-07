@@ -49,7 +49,9 @@ import {
   Pencil,
   Plus,
   Trash2,
-  RefreshCw
+  RefreshCw,
+  Ban,
+  ShieldCheck as ShieldCheckIcon
 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import 'react-quill/dist/quill.snow.css';
@@ -124,8 +126,11 @@ export default function AdminPanel() {
   const queryClient = useQueryClient();
   const [filtroStatus, setFiltroStatus] = useState('todos');
   const [busca, setBusca] = useState('');
+  const [dataInicio, setDataInicio] = useState('');
+  const [dataFim, setDataFim] = useState('');
   const [enviandoBrevo, setEnviandoBrevo] = useState({});
   const [sincronizando, setSincronizando] = useState({});
+  const [bloqueando, setBloqueando] = useState({});
   const [showNotificationDialog, setShowNotificationDialog] = useState(false);
   const [editingNotification, setEditingNotification] = useState(null);
   const [notificationForm, setNotificationForm] = useState({
@@ -174,7 +179,19 @@ export default function AdminPanel() {
       c.nome?.toLowerCase().includes(busca.toLowerCase()) ||
       c.owner_email?.toLowerCase().includes(busca.toLowerCase()) ||
       c.telefone?.includes(busca);
-    return matchStatus && matchBusca;
+
+    let matchData = true;
+    if (dataInicio || dataFim) {
+      const cadastro = c.created_date ? c.created_date.slice(0, 10) : null;
+      if (!cadastro) {
+        matchData = false;
+      } else {
+        if (dataInicio && cadastro < dataInicio) matchData = false;
+        if (dataFim && cadastro > dataFim) matchData = false;
+      }
+    }
+
+    return matchStatus && matchBusca && matchData;
   });
 
   const copiar = (texto, label) => {
@@ -204,6 +221,20 @@ export default function AdminPanel() {
       toast({ title: 'Erro ao adicionar no Brevo', variant: 'destructive' });
     } finally {
       setEnviandoBrevo(prev => ({ ...prev, [confeitaria.id]: false }));
+    }
+  };
+
+  const handleToggleBloqueado = async (confeitaria) => {
+    setBloqueando(prev => ({ ...prev, [confeitaria.id]: true }));
+    const novoBloqueado = !confeitaria.bloqueado;
+    try {
+      await appClient.entities.Confeitaria.update(confeitaria.id, { bloqueado: novoBloqueado });
+      await queryClient.invalidateQueries({ queryKey: ['admin-confeitarias'] });
+      toast({ title: novoBloqueado ? 'Conta bloqueada' : 'Conta desbloqueada' });
+    } catch (err) {
+      toast({ title: 'Erro ao alterar bloqueio', description: err?.message || '', variant: 'destructive' });
+    } finally {
+      setBloqueando(prev => ({ ...prev, [confeitaria.id]: false }));
     }
   };
 
@@ -323,8 +354,8 @@ export default function AdminPanel() {
         <TabsContent value="leads" className="mt-6 space-y-4">
 
           {/* Filtros */}
-          <div className="flex flex-col sm:flex-row gap-3">
-            <div className="relative flex-1">
+          <div className="flex flex-col sm:flex-row gap-3 flex-wrap">
+            <div className="relative flex-1 min-w-[180px]">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               <Input
                 placeholder="Buscar por nome, e-mail ou telefone..."
@@ -346,6 +377,32 @@ export default function AdminPanel() {
                 <SelectItem value="canceled">Cancelado</SelectItem>
               </SelectContent>
             </Select>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-gray-500 whitespace-nowrap">Cadastro:</span>
+              <Input
+                type="date"
+                value={dataInicio}
+                onChange={e => setDataInicio(e.target.value)}
+                className="w-36 text-sm"
+                title="Data início"
+              />
+              <span className="text-gray-400 text-sm">até</span>
+              <Input
+                type="date"
+                value={dataFim}
+                onChange={e => setDataFim(e.target.value)}
+                className="w-36 text-sm"
+                title="Data fim"
+              />
+              {(dataInicio || dataFim) && (
+                <button
+                  onClick={() => { setDataInicio(''); setDataFim(''); }}
+                  className="text-xs text-gray-400 hover:text-gray-600 underline whitespace-nowrap"
+                >
+                  limpar
+                </button>
+              )}
+            </div>
           </div>
 
           <p className="text-sm text-gray-500">
@@ -436,6 +493,23 @@ export default function AdminPanel() {
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => handleToggleBloqueado(c)}
+                              disabled={bloqueando[c.id]}
+                              title={c.bloqueado ? 'Desbloquear conta' : 'Bloquear conta'}
+                              className={`p-1.5 rounded-lg transition-colors disabled:opacity-40 ${
+                                c.bloqueado
+                                  ? 'text-red-500 hover:text-red-700 hover:bg-red-50'
+                                  : 'text-gray-400 hover:text-red-500 hover:bg-red-50'
+                              }`}
+                            >
+                              {bloqueando[c.id]
+                                ? <Loader2 className="w-4 h-4 animate-spin" />
+                                : c.bloqueado
+                                  ? <Ban className="w-4 h-4" />
+                                  : <ShieldCheckIcon className="w-4 h-4" />
+                              }
+                            </button>
                             <button
                               onClick={() => handleSyncSubscription(c)}
                               disabled={sincronizando[c.id] || !c.stripe_customer_id}
