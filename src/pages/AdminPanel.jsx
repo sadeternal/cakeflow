@@ -868,8 +868,17 @@ export default function AdminPanel() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <ReceiptText className="w-5 h-5 text-purple-600" />
-              Histórico de Assinatura — {historyConfeitaria?.nome}
+              Histórico de Assinatura
             </DialogTitle>
+            <div className="pt-1 space-y-0.5">
+              <p className="font-semibold text-gray-900 text-sm">{historyConfeitaria?.nome}</p>
+              {historyConfeitaria?.owner_email && (
+                <p className="text-xs text-gray-500 flex items-center gap-1">
+                  <Mail className="w-3 h-3" />
+                  {historyConfeitaria.owner_email}
+                </p>
+              )}
+            </div>
           </DialogHeader>
 
           {loadingHistory ? (
@@ -948,10 +957,9 @@ export default function AdminPanel() {
                             {inv.number && <span className="text-xs text-gray-400">{inv.number}</span>}
                           </div>
                           <p className="text-gray-600">
-                            {formatarData(inv.created)}
-                            {inv.period_start && inv.period_end && (
-                              <span className="text-gray-400"> · {formatarData(inv.period_start)} → {formatarData(inv.period_end)}</span>
-                            )}
+                            {inv.period_start && inv.period_end
+                              ? `${formatarData(inv.period_start)} → ${formatarData(inv.period_end)}`
+                              : formatarData(inv.created)}
                           </p>
                         </div>
                         <div className="flex items-center gap-3 shrink-0">
