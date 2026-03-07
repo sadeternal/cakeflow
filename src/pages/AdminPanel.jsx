@@ -48,7 +48,8 @@ import {
   Bell,
   Pencil,
   Plus,
-  Trash2
+  Trash2,
+  RefreshCw
 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import 'react-quill/dist/quill.snow.css';
@@ -124,6 +125,7 @@ export default function AdminPanel() {
   const [filtroStatus, setFiltroStatus] = useState('todos');
   const [busca, setBusca] = useState('');
   const [enviandoBrevo, setEnviandoBrevo] = useState({});
+  const [sincronizando, setSincronizando] = useState({});
   const [showNotificationDialog, setShowNotificationDialog] = useState(false);
   const [editingNotification, setEditingNotification] = useState(null);
   const [notificationForm, setNotificationForm] = useState({
@@ -178,6 +180,19 @@ export default function AdminPanel() {
   const copiar = (texto, label) => {
     navigator.clipboard.writeText(texto);
     toast({ title: `${label} copiado!` });
+  };
+
+  const handleSyncSubscription = async (confeitaria) => {
+    setSincronizando(prev => ({ ...prev, [confeitaria.id]: true }));
+    try {
+      await appClient.functions.invoke('syncSubscription', { confeitaria_id: confeitaria.id });
+      await queryClient.invalidateQueries({ queryKey: ['admin-confeitarias'] });
+      toast({ title: 'Assinatura sincronizada com o Stripe!' });
+    } catch (err) {
+      toast({ title: 'Erro ao sincronizar assinatura', description: err?.message || '', variant: 'destructive' });
+    } finally {
+      setSincronizando(prev => ({ ...prev, [confeitaria.id]: false }));
+    }
   };
 
   const handleAddBrevo = async (confeitaria) => {
@@ -420,17 +435,30 @@ export default function AdminPanel() {
                           {c.como_conheceu || '—'}
                         </TableCell>
                         <TableCell>
-                          <button
-                            onClick={() => handleAddBrevo(c)}
-                            disabled={enviandoBrevo[c.id]}
-                            title="Adicionar ao Brevo"
-                            className="p-1.5 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors disabled:opacity-50"
-                          >
-                            {enviandoBrevo[c.id]
-                              ? <Loader2 className="w-4 h-4 animate-spin" />
-                              : <Mail className="w-4 h-4" />
-                            }
-                          </button>
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => handleSyncSubscription(c)}
+                              disabled={sincronizando[c.id] || !c.stripe_customer_id}
+                              title={c.stripe_customer_id ? 'Sincronizar assinatura com Stripe' : 'Sem customer Stripe'}
+                              className="p-1.5 rounded-lg text-gray-400 hover:text-green-600 hover:bg-green-50 transition-colors disabled:opacity-40"
+                            >
+                              {sincronizando[c.id]
+                                ? <Loader2 className="w-4 h-4 animate-spin" />
+                                : <RefreshCw className="w-4 h-4" />
+                              }
+                            </button>
+                            <button
+                              onClick={() => handleAddBrevo(c)}
+                              disabled={enviandoBrevo[c.id]}
+                              title="Adicionar ao Brevo"
+                              className="p-1.5 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors disabled:opacity-50"
+                            >
+                              {enviandoBrevo[c.id]
+                                ? <Loader2 className="w-4 h-4 animate-spin" />
+                                : <Mail className="w-4 h-4" />
+                              }
+                            </button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     );

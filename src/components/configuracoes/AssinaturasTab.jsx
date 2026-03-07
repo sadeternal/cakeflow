@@ -207,6 +207,20 @@ export default function AssinaturasTab({ confeitaria, onUpdate }) {
                 <Badge className={config.color}>{status}</Badge>
               </div>
               <p className="text-sm text-gray-600">{config.description}</p>
+              {(status === 'active' || status === 'canceling') && (
+                <p className="mt-1.5 text-[11px] text-gray-400">
+                  Ao contratar o plano, você concorda com os{' '}
+                  <a
+                    href="https://cakeflow.com.br/termo-de-uso/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline hover:text-gray-500"
+                  >
+                    Termos de Uso
+                  </a>{' '}
+                  do sistema.
+                </p>
+              )}
             </div>
           </div>
 

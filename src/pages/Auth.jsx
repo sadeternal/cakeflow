@@ -53,9 +53,35 @@ export default function AuthPage() {
     password: '',
     confirmPassword: ''
   });
+  const [termsAccepted, setTermsAccepted] = useState(false);
   const [forgotPasswordOpen, setForgotPasswordOpen] = useState(false);
   const [forgotEmail, setForgotEmail] = useState('');
   const [isSendingReset, setIsSendingReset] = useState(false);
+
+  const TERMS_VERSION = '1.0';
+  const TERMS_PENDING_KEY = 'pending_terms_acceptance';
+
+  const fetchClientIp = async () => {
+    try {
+      const res = await fetch('https://api.ipify.org?format=json');
+      const data = await res.json();
+      return data.ip || null;
+    } catch {
+      return null;
+    }
+  };
+
+  const recordTermsAcceptance = async (ip) => {
+    try {
+      await appClient.functions.invokeRpc('record_terms_acceptance', {
+        p_ip: ip,
+        p_terms_version: TERMS_VERSION
+      });
+      localStorage.removeItem(TERMS_PENDING_KEY);
+    } catch {
+      // falha silenciosa — aceite já foi registrado via checkbox obrigatório
+    }
+  };
 
   const redirectTo = useMemo(() => readRedirect(location.search), [location.search]);
   const forceAuth = useMemo(() => new URLSearchParams(location.search).get('force') === '1', [location.search]);
@@ -130,6 +156,12 @@ export default function AuthPage() {
         email: loginData.email.trim(),
         password: loginData.password
       });
+      // Grava aceite pendente (usuário que confirmou e-mail antes de logar)
+      const pending = localStorage.getItem(TERMS_PENDING_KEY);
+      if (pending) {
+        const { ip } = JSON.parse(pending);
+        await recordTermsAcceptance(ip);
+      }
       window.location.replace(redirectTo);
     } catch (error) {
       toast({
@@ -152,8 +184,18 @@ export default function AuthPage() {
       });
       return;
     }
+    if (!termsAccepted) {
+      toast({
+        title: 'Termos não aceitos',
+        description: 'Você precisa aceitar os Termos de Uso para criar uma conta.',
+        variant: 'destructive'
+      });
+      return;
+    }
 
     setIsSubmitting(true);
+    const clientIp = await fetchClientIp();
+
     try {
       const payload = await appClient.auth.signUpWithPassword({
         email: signupData.email.trim(),
@@ -161,6 +203,12 @@ export default function AuthPage() {
       });
 
       if (!payload?.access_token) {
+        // Confirmação de e-mail necessária — persiste aceite para gravar no login
+        localStorage.setItem(TERMS_PENDING_KEY, JSON.stringify({
+          ip: clientIp,
+          version: TERMS_VERSION,
+          accepted_at: new Date().toISOString()
+        }));
         await syncSignupToBrevo();
         toast({
           title: 'Cadastro criado',
@@ -171,6 +219,7 @@ export default function AuthPage() {
       }
 
       await syncSignupToBrevo();
+      await recordTermsAcceptance(clientIp);
       toast({
         title: 'Conta criada',
         description: 'Cadastro concluído. Vamos configurar sua confeitaria.'
@@ -330,10 +379,33 @@ export default function AuthPage() {
                   </div>
                 </div>
 
+                <div className="flex items-start gap-2.5 pt-1">
+                  <input
+                    id="terms-checkbox"
+                    type="checkbox"
+                    checked={termsAccepted}
+                    onChange={(e) => setTermsAccepted(e.target.checked)}
+                    className="mt-[3px] h-4 w-4 shrink-0 cursor-pointer accent-[#ef2b63]"
+                  />
+                  <label htmlFor="terms-checkbox" className="text-[13px] leading-snug text-[#5a5d65] cursor-pointer select-none">
+                    Li e concordo com os{' '}
+                    <a
+                      href="https://cakeflow.com.br/termo-de-uso/"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-medium text-[#ef2b63] underline hover:text-[#d92358]"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      Termos de Uso e Condições
+                    </a>{' '}
+                    da plataforma
+                  </label>
+                </div>
+
                 <Button
-                  disabled={isSubmitting || !isSupabaseConfigured}
+                  disabled={isSubmitting || !isSupabaseConfigured || !termsAccepted}
                   type="submit"
-                  className="mt-3 h-11 w-full rounded-xl bg-[#ef2b63] text-[15px] font-semibold text-white hover:bg-[#dc2458]"
+                  className="mt-3 h-11 w-full rounded-xl bg-[#ef2b63] text-[15px] font-semibold text-white hover:bg-[#dc2458] disabled:opacity-50"
                 >
                   Criar Conta
                 </Button>

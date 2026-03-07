@@ -44,11 +44,31 @@ serve(async (req) => {
     const { adminClient } = getSupabaseClients(req);
     const confeitaria = await getConfeitariaById(adminClient, confeitariaId);
 
-    if (!confeitaria.stripe_subscription_id) {
+    let subscriptionId = confeitaria.stripe_subscription_id as string | null;
+
+    // Se não há subscription_id mas há customer_id, busca a assinatura ativa no Stripe
+    if (!subscriptionId && confeitaria.stripe_customer_id) {
+      const list = await stripe.subscriptions.list({
+        customer: confeitaria.stripe_customer_id as string,
+        status: 'all',
+        limit: 10
+      });
+      const found = list.data.find((s) =>
+        ['trialing', 'active', 'past_due', 'incomplete'].includes(s.status)
+      );
+      if (found) {
+        subscriptionId = found.id;
+        await updateConfeitariaById(adminClient, confeitaria.id, {
+          stripe_subscription_id: subscriptionId
+        });
+      }
+    }
+
+    if (!subscriptionId) {
       throw new HttpError(404, 'Nenhuma assinatura encontrada');
     }
 
-    const subscription = await stripe.subscriptions.retrieve(confeitaria.stripe_subscription_id);
+    const subscription = await stripe.subscriptions.retrieve(subscriptionId);
     const status = resolveSubscriptionStatus(subscription);
 
     const updateData = {

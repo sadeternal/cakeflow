@@ -56,8 +56,14 @@ serve(async (req) => {
         });
         if (!confeitaria) break;
 
+        // Recupera assinatura completa para atualizar status imediatamente,
+        // sem depender do evento customer.subscription.created chegar depois.
+        const subscription = await stripe.subscriptions.retrieve(subscriptionId);
         await updateConfeitariaById(adminClient, confeitaria.id, {
-          stripe_subscription_id: subscriptionId
+          stripe_subscription_id: subscriptionId,
+          status_assinatura: resolveSubscriptionStatus(subscription),
+          data_proximo_pagamento: toIsoFromUnix(subscription.current_period_end),
+          data_fim_trial: toIsoFromUnix(subscription.trial_end)
         });
         break;
       }

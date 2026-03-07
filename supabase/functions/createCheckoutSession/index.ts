@@ -7,6 +7,7 @@ import {
   optionsResponse,
   readJsonBody
 } from '../_shared/http.ts';
+import { resolveSubscriptionStatus, toIsoFromUnix } from '../_shared/subscription.ts';
 import {
   assertConfeitariaAccess,
   getAppUrl,
@@ -101,6 +102,13 @@ serve(async (req) => {
 
       if (ongoingStripeSubscription) {
         subscriptionId = ongoingStripeSubscription.id;
+        // Sincroniza status imediatamente — evita depender do webhook
+        await updateConfeitariaById(adminClient, confeitaria.id, {
+          stripe_subscription_id: subscriptionId,
+          status_assinatura: resolveSubscriptionStatus(ongoingStripeSubscription),
+          data_proximo_pagamento: toIsoFromUnix(ongoingStripeSubscription.current_period_end),
+          data_fim_trial: toIsoFromUnix(ongoingStripeSubscription.trial_end)
+        });
       }
     }
 

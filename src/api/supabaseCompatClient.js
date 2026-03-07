@@ -159,6 +159,7 @@ const ENTITY_TABLE_MAP = {
   SystemNotificationRead: 'system_notification_reads',
   PedidoNotificationRead: 'pedido_notification_reads',
   ParcelamentoPedido: 'parcelamento_pedidos',
+  TermsAcceptance: 'terms_acceptances',
   User: 'profiles'
 };
 
