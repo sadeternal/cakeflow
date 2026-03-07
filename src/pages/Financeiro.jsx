@@ -3,7 +3,7 @@ import { appClient } from '@/api/appClient';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { createPageUrl } from '@/utils';
 import { useAuth } from '@/lib/AuthContext';
-import { format, parseISO, startOfMonth, endOfMonth, isWithinInterval } from 'date-fns';
+import { format, parseISO, startOfMonth, endOfMonth, isWithinInterval, addMonths } from 'date-fns';
 import {
   TrendingUp,
   TrendingDown,
@@ -50,6 +50,19 @@ const tiposReceber = [
   { value: 'outro', label: 'Outro' },
 ];
 
+const formatRecebimentoTitle = (conta) => {
+  const numeroPedido = conta.pedido_numero ? `Pedido #${conta.pedido_numero}` : null;
+  return numeroPedido || conta.cliente_nome || conta.descricao;
+};
+
+const formatRecebimentoMeta = (conta) => {
+  const detalhes = [];
+  if (conta.pedido_numero && conta.cliente_nome) detalhes.push(conta.cliente_nome);
+  if (conta.forma_pagamento) detalhes.push(conta.forma_pagamento);
+  if (conta.parcelas_total > 1) detalhes.push(`Parcela ${conta.parcela_atual}/${conta.parcelas_total}`);
+  return detalhes.join(' • ');
+};
+
 export default function Financeiro() {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('visao');
@@ -95,6 +108,12 @@ export default function Financeiro() {
   const { data: pedidos = [] } = useQuery({
     queryKey: ['pedidos', user?.confeitaria_id],
     queryFn: () => appClient.entities.Pedido.filter({ confeitaria_id: user.confeitaria_id }),
+    enabled: !!user?.confeitaria_id,
+  });
+
+  const { data: parcelamentos = [] } = useQuery({
+    queryKey: ['parcelamentos', user?.confeitaria_id],
+    queryFn: () => appClient.entities.ParcelamentoPedido.filter({ confeitaria_id: user.confeitaria_id }),
     enabled: !!user?.confeitaria_id,
   });
 
@@ -165,6 +184,14 @@ export default function Financeiro() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['contasReceber'] }),
   });
 
+  const marcarParcelaPaga = useMutation({
+    mutationFn: ({ id, pago }) => appClient.entities.ParcelamentoPedido.update(id, {
+      status: pago ? 'pago' : 'pendente',
+      data_pagamento: pago ? format(new Date(), 'yyyy-MM-dd') : null,
+    }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['parcelamentos'] }),
+  });
+
   // Cálculos
   const mesSelecionado = parseISO(`${mesAtual}-01`);
   const inicioMes = startOfMonth(mesSelecionado);
@@ -188,7 +215,24 @@ export default function Financeiro() {
 
   const lucroMes = receitaMes - despesasMes;
 
-  const aReceberPendente = contasReceber.filter(c => !c.recebido).reduce((acc, c) => acc + (c.valor || 0), 0);
+  // Pedidos aprovados (não orcamento, não cancelado)
+  const pedidosAprovados = new Set(
+    pedidos.filter(p => p.status !== 'orcamento' && p.status !== 'cancelado').map(p => p.id)
+  );
+
+  // Parcelas do mês selecionado, apenas de pedidos aprovados
+  const parcelamentosMes = parcelamentos.filter(p => {
+    if (!pedidosAprovados.has(p.pedido_id)) return false;
+    if (!p.data_vencimento) return false;
+    const date = parseISO(p.data_vencimento);
+    return isWithinInterval(date, { start: inicioMes, end: fimMes });
+  });
+
+  const parcelasPendentes = parcelamentosMes.filter(p => p.status === 'pendente');
+  const parcelasRecebidasMes = parcelamentosMes.filter(p => p.status === 'pago');
+
+  const aReceberPendente = contasReceber.filter(c => !c.recebido).reduce((acc, c) => acc + (c.valor || 0), 0)
+    + parcelasPendentes.reduce((acc, p) => acc + (parseFloat(p.valor) || 0), 0);
   const aPagarPendente = contasPagar.filter(c => !c.pago).reduce((acc, c) => acc + (c.valor || 0), 0);
 
   if (!user) return null;
@@ -286,60 +330,112 @@ export default function Financeiro() {
 
         <TabsContent value="visao" className="mt-6">
           <div className="grid lg:grid-cols-2 gap-6">
-            {/* Últimos Recebimentos */}
+            {/* A Receber Pendente */}
             <Card className="border-0 shadow-lg shadow-gray-100/50">
               <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <CardTitle className="text-lg flex items-center gap-2">
                   <ArrowUpCircle className="w-5 h-5 text-emerald-500" />
-                  Recebimentos
+                  A Receber
                 </CardTitle>
+                <span className="text-sm font-semibold text-emerald-600">
+                  R$ {aReceberPendente.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                </span>
               </CardHeader>
               <CardContent>
-                {contasReceber.filter(c => c.recebido).slice(0, 5).length === 0 ? (
-                  <p className="text-gray-500 text-sm text-center py-4">Nenhum recebimento</p>
-                ) : (
-                  <div className="space-y-2">
-                    {contasReceber.filter(c => c.recebido).slice(0, 5).map((conta) => (
-                      <div key={conta.id} className="flex items-center justify-between p-3 bg-emerald-50 rounded-lg">
-                        <div>
-                          <p className="font-medium text-gray-900">{conta.cliente_nome || conta.descricao}</p>
-                          <p className="text-sm text-gray-500">
-                            {conta.data_recebimento && format(parseISO(conta.data_recebimento), "dd/MM/yyyy")}
-                          </p>
+                {(() => {
+                  const pendentesContas = contasReceber.filter(c => !c.recebido).slice(0, 3);
+                  const pendentesItems = [
+                    ...parcelasPendentes.map(p => {
+                      const ped = pedidos.find(pd => pd.id === p.pedido_id);
+                      const isAvista = (ped?.parcelas || 1) <= 1;
+                      return {
+                        id: p.id,
+                        tipo: 'parcela',
+                        nome: isAvista
+                          ? (ped?.cliente_nome || 'Cliente')
+                          : `${ped?.cliente_nome || 'Cliente'} - Parcela ${p.numero_parcela}`,
+                        badge: isAvista ? 'À vista' : 'Parcelamento',
+                        badgeClass: isAvista ? 'bg-gray-100 text-gray-600' : 'bg-blue-100 text-blue-600',
+                        valor: parseFloat(p.valor) || 0,
+                        data: p.data_vencimento,
+                      };
+                    }),
+                    ...pendentesContas.map(c => ({
+                      id: c.id,
+                      tipo: 'conta',
+                      nome: formatRecebimentoTitle(c),
+                      badge: tiposReceber.find(t => t.value === c.tipo)?.label,
+                      badgeClass: 'bg-gray-100 text-gray-600',
+                      valor: c.valor || 0,
+                      data: c.data_vencimento,
+                    })),
+                  ].slice(0, 5);
+
+                  if (pendentesItems.length === 0) {
+                    return <p className="text-gray-500 text-sm text-center py-4">Nenhum valor pendente</p>;
+                  }
+
+                  return (
+                    <div className="space-y-2">
+                      {pendentesItems.map(item => (
+                        <div key={item.id} className="flex items-center justify-between p-3 bg-emerald-50 rounded-lg">
+                          <div>
+                            <p className="font-medium text-gray-900 text-sm">{item.nome}</p>
+                            <div className="flex items-center gap-2 mt-1">
+                              <Badge variant="secondary" className={`text-xs ${item.badgeClass}`}>
+                                {item.badge}
+                              </Badge>
+                              {item.data && (
+                                <span className="text-xs text-gray-500">
+                                  Vence: {format(parseISO(item.data), 'dd/MM/yyyy')}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <span className="font-semibold text-emerald-600 text-sm">
+                            R$ {item.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </span>
                         </div>
-                        <span className="font-semibold text-emerald-600">
-                          + R$ {conta.valor?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                      ))}
+                    </div>
+                  );
+                })()}
               </CardContent>
             </Card>
 
-            {/* Últimos Pagamentos */}
+            {/* A Pagar Pendente */}
             <Card className="border-0 shadow-lg shadow-gray-100/50">
               <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <CardTitle className="text-lg flex items-center gap-2">
                   <ArrowDownCircle className="w-5 h-5 text-red-500" />
-                  Pagamentos
+                  A Pagar
                 </CardTitle>
+                <span className="text-sm font-semibold text-red-600">
+                  R$ {aPagarPendente.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                </span>
               </CardHeader>
               <CardContent>
-                {contasPagar.filter(c => c.pago).slice(0, 5).length === 0 ? (
-                  <p className="text-gray-500 text-sm text-center py-4">Nenhum pagamento</p>
+                {contasPagar.filter(c => !c.pago).slice(0, 5).length === 0 ? (
+                  <p className="text-gray-500 text-sm text-center py-4">Nenhum pagamento pendente</p>
                 ) : (
                   <div className="space-y-2">
-                    {contasPagar.filter(c => c.pago).slice(0, 5).map((conta) => (
+                    {contasPagar.filter(c => !c.pago).slice(0, 5).map((conta) => (
                       <div key={conta.id} className="flex items-center justify-between p-3 bg-red-50 rounded-lg">
                         <div>
-                          <p className="font-medium text-gray-900">{conta.descricao}</p>
-                          <p className="text-sm text-gray-500">
-                            {conta.data_pagamento && format(parseISO(conta.data_pagamento), "dd/MM/yyyy")}
-                          </p>
+                          <p className="font-medium text-gray-900 text-sm">{conta.descricao}</p>
+                          <div className="flex items-center gap-2 mt-1">
+                            <Badge variant="secondary" className="text-xs">
+                              {categoriasPagar.find(c => c.value === conta.categoria)?.label}
+                            </Badge>
+                            {conta.data_vencimento && (
+                              <span className="text-xs text-gray-500">
+                                Vence: {format(parseISO(conta.data_vencimento), 'dd/MM/yyyy')}
+                              </span>
+                            )}
+                          </div>
                         </div>
-                        <span className="font-semibold text-red-600">
-                          - R$ {conta.valor?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        <span className="font-semibold text-red-600 text-sm">
+                          R$ {conta.valor?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                         </span>
                       </div>
                     ))}
@@ -363,10 +459,69 @@ export default function Financeiro() {
               </Button>
             </CardHeader>
             <CardContent>
-              {contasReceber.length === 0 ? (
-                <p className="text-gray-500 text-center py-8">Nenhuma conta a receber</p>
-              ) : (
+              {/* Parcelas de pedidos */}
+              {parcelamentosMes.length > 0 && (
+                <div className="space-y-2 mb-4">
+                  <h3 className="text-sm font-semibold text-gray-500 mb-2">Recebimentos de Pedidos</h3>
+                  {parcelamentosMes.map((parcela) => {
+                    const ped = pedidos.find(p => p.id === parcela.pedido_id);
+                    const isAvista = (ped?.parcelas || 1) <= 1;
+                    const isPago = parcela.status === 'pago';
+                    return (
+                      <div
+                        key={parcela.id}
+                        className={`flex items-center justify-between p-4 rounded-xl ${
+                          isPago ? 'bg-emerald-50' : 'bg-gray-50'
+                        }`}
+                      >
+                        <div className="flex items-center gap-4">
+                          <button
+                            onClick={() => marcarParcelaPaga.mutate({ id: parcela.id, pago: !isPago })}
+                            className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${
+                              isPago
+                                ? 'bg-emerald-500 border-emerald-500 text-white'
+                                : 'border-gray-300'
+                            }`}
+                          >
+                            {isPago && <Check className="w-4 h-4" />}
+                          </button>
+                          <div>
+                            <p className={`font-medium ${isPago ? 'line-through text-gray-500' : 'text-gray-900'}`}>
+                              {isAvista
+                                ? (ped?.cliente_nome || 'Cliente')
+                                : `${ped?.cliente_nome || 'Cliente'} - Parcela ${parcela.numero_parcela}`}
+                            </p>
+                            <div className="flex items-center gap-2 text-sm text-gray-500">
+                              <Badge
+                                variant="secondary"
+                                className={`text-xs ${isAvista ? 'bg-gray-100 text-gray-600' : 'bg-blue-100 text-blue-600'}`}
+                              >
+                                {isAvista ? 'À vista' : 'Parcelamento'}
+                              </Badge>
+                              {ped?.forma_pagamento_nome && (
+                                <span>{ped.forma_pagamento_nome}</span>
+                              )}
+                              {parcela.data_vencimento && (
+                                <span>Vence: {format(parseISO(parcela.data_vencimento), 'dd/MM/yyyy')}</span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        <span className={`font-bold ${isPago ? 'text-emerald-600' : 'text-gray-900'}`}>
+                          R$ {parseFloat(parcela.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Contas manuais */}
+              {contasReceber.length > 0 && (
                 <div className="space-y-2">
+                  {parcelamentosMes.length > 0 && (
+                    <h3 className="text-sm font-semibold text-gray-500 mb-2">Contas Manuais</h3>
+                  )}
                   {contasReceber.map((conta) => (
                     <div
                       key={conta.id}
@@ -387,12 +542,15 @@ export default function Financeiro() {
                         </button>
                         <div>
                           <p className={`font-medium ${conta.recebido ? 'line-through text-gray-500' : 'text-gray-900'}`}>
-                            {conta.cliente_nome || conta.descricao}
+                            {formatRecebimentoTitle(conta)}
                           </p>
                           <div className="flex items-center gap-2 text-sm text-gray-500">
                             <Badge variant="secondary" className="text-xs">
                               {tiposReceber.find(t => t.value === conta.tipo)?.label}
                             </Badge>
+                            {formatRecebimentoMeta(conta) && (
+                              <span>{formatRecebimentoMeta(conta)}</span>
+                            )}
                             {conta.data_vencimento && (
                               <span>Vence: {format(parseISO(conta.data_vencimento), "dd/MM/yyyy")}</span>
                             )}
@@ -415,6 +573,10 @@ export default function Financeiro() {
                     </div>
                   ))}
                 </div>
+              )}
+
+              {contasReceber.length === 0 && parcelamentosMes.length === 0 && (
+                <p className="text-gray-500 text-center py-8">Nenhuma conta a receber</p>
               )}
             </CardContent>
           </Card>

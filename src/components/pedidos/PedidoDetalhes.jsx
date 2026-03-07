@@ -14,6 +14,8 @@ import {
   CheckCircle2,
   Package,
   Truck,
+  CreditCard,
+  MapPin,
   Pencil } from
 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -38,6 +40,19 @@ const statusOrder = ['orcamento', 'aprovado', 'producao', 'pronto', 'entregue'];
 
 export default function PedidoDetalhes({ pedido, onClose, onStatusChange }) {
   const StatusIcon = statusConfig[pedido.status]?.icon || Clock;
+  const isProdutoPronto = pedido.tipo === 'produto_pronto';
+  const paymentLabel = pedido.forma_pagamento_nome || pedido.forma_pagamento || 'Não definido';
+  const parcelasLabel = `${Number(pedido.parcelas) || 1}x`;
+  const createdAt = pedido.created_date ? parseISO(pedido.created_date) : null;
+  const deliveryDate = pedido.data_entrega ? parseISO(pedido.data_entrega) : null;
+  const orderItems = Array.isArray(pedido.produtos_catalogo) ? pedido.produtos_catalogo : [];
+  const hasCustomObservations = Boolean(String(pedido.observacoes || '').trim());
+  const deliveryTypeLabel =
+    pedido.tipo_entrega === 'entrega'
+      ? 'Delivery'
+      : pedido.tipo_entrega === 'retirada'
+        ? 'Retirada no local'
+        : 'Não definido';
 
   const handleWhatsApp = () => {
     const nome = pedido.cliente_nome || '';
@@ -96,80 +111,153 @@ export default function PedidoDetalhes({ pedido, onClose, onStatusChange }) {
             </div>
           </div>
 
-          {/* Data e Horário */}
+          {/* Data, horário e entrega */}
           <div className="space-y-3">
             <h3 className="font-semibold text-gray-900 flex items-center gap-2">
               <Calendar className="w-4 h-4 text-rose-500" />
-              Entrega
+              {isProdutoPronto ? 'Pedido' : 'Reserva'}
             </h3>
-            <div className="bg-gray-50 rounded-xl p-4">
-              <div className="flex items-center gap-4">
+            <div className="bg-gray-50 rounded-xl p-4 space-y-4">
+              <div className="flex flex-wrap items-start gap-6">
                 <div>
-                  <p className="text-sm text-gray-500">Data</p>
+                  <p className="text-sm text-gray-500">{isProdutoPronto ? 'Data do pedido' : 'Data da reserva'}</p>
                   <p className="font-medium text-gray-900">
-                    {pedido.data_entrega ?
-                    format(parseISO(pedido.data_entrega), "dd 'de' MMMM 'de' yyyy", { locale: ptBR }) :
+                    {isProdutoPronto ?
+                    createdAt ?
+                    format(createdAt, "dd 'de' MMMM 'de' yyyy", { locale: ptBR }) :
+                    'Não definida' :
+                    deliveryDate ?
+                    format(deliveryDate, "dd 'de' MMMM 'de' yyyy", { locale: ptBR }) :
                     'Não definida'}
                   </p>
                 </div>
-                {pedido.horario_entrega &&
+
                 <div>
-                    <p className="text-sm text-gray-500">Horário</p>
-                    <p className="font-medium text-gray-900">{pedido.horario_entrega}</p>
+                  <p className="text-sm text-gray-500">{isProdutoPronto ? 'Hora do pedido' : 'Hora da reserva'}</p>
+                  <p className="font-medium text-gray-900">
+                    {isProdutoPronto ?
+                    createdAt ?
+                    format(createdAt, 'HH:mm') :
+                    'Não definida' :
+                    pedido.horario_entrega || 'Não definida'}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-sm text-gray-500 flex items-center gap-1">
+                    <Truck className="w-3.5 h-3.5" />
+                    Tipo de entrega
+                  </p>
+                  <p className="font-medium text-gray-900">{deliveryTypeLabel}</p>
+                </div>
+              </div>
+
+              {isProdutoPronto && pedido.endereco_entrega &&
+                <div>
+                  <p className="text-sm text-gray-500 flex items-center gap-1">
+                    <MapPin className="w-3.5 h-3.5" />
+                    Endereço
+                  </p>
+                  <p className="font-medium text-gray-900">{pedido.endereco_entrega}</p>
+                </div>
+              }
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+              <CreditCard className="w-4 h-4 text-rose-500" />
+              Pagamento
+            </h3>
+            <div className="bg-gray-50 rounded-xl p-4">
+              <p className="text-sm text-gray-500">Forma de pagamento</p>
+              <p className="font-medium text-gray-900">
+                {paymentLabel} em {parcelasLabel}
+              </p>
+            </div>
+          </div>
+
+          {isProdutoPronto ? (
+            <div className="space-y-3">
+              <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                <Package className="w-4 h-4 text-rose-500" />
+                Itens
+              </h3>
+              <div className="bg-gray-50 rounded-xl p-4 space-y-3">
+                {orderItems.length === 0 ? (
+                  <p className="text-sm text-gray-500">Nenhum item registrado.</p>
+                ) : (
+                  orderItems.map((item, index) => {
+                    const quantidade = Number(item.quantidade || 0);
+                    const preco = Number(item.preco || 0);
+                    const subtotal = quantidade * preco;
+
+                    return (
+                      <div key={index} className="border-b border-gray-200 pb-3 last:border-b-0 last:pb-0">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="font-medium text-gray-900">{item.nome}</p>
+                            <p className="text-sm text-gray-500">{quantidade}x de R$ {preco.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                          </div>
+                          <p className="font-semibold text-gray-900">
+                            R$ {subtotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                <Cake className="w-4 h-4 text-rose-500" />
+                Detalhes do Bolo
+              </h3>
+              <div className="bg-gray-50 rounded-xl p-4 space-y-3">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-gray-500">Tamanho</p>
+                    <p className="font-medium text-gray-900">{pedido.tamanho_nome}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">Massa</p>
+                    <p className="font-medium text-gray-900">{pedido.massa_nome}</p>
+                  </div>
+                </div>
+                {pedido.recheios?.length > 0 &&
+                <div>
+                    <p className="text-sm text-gray-500">Recheios</p>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {pedido.recheios.map((r, i) =>
+                    <Badge key={i} variant="secondary" className="bg-rose-100 text-rose-700">
+                          {r.nome}
+                        </Badge>
+                    )}
+                    </div>
+                  </div>
+                }
+                <div>
+                  <p className="text-sm text-gray-500">Cobertura</p>
+                  <p className="font-medium text-gray-900">{pedido.cobertura_nome}</p>
+                </div>
+                {pedido.extras?.length > 0 &&
+                <div>
+                    <p className="text-sm text-gray-500">Extras</p>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {pedido.extras.map((e, i) =>
+                    <Badge key={i} variant="outline">
+                          {e.nome}
+                          {e.observacao && ` (${e.observacao})`}
+                        </Badge>
+                    )}
+                    </div>
                   </div>
                 }
               </div>
             </div>
-          </div>
-
-          {/* Detalhes do Bolo */}
-          <div className="space-y-3">
-            <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-              <Cake className="w-4 h-4 text-rose-500" />
-              Detalhes do Bolo
-            </h3>
-            <div className="bg-gray-50 rounded-xl p-4 space-y-3">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm text-gray-500">Tamanho</p>
-                  <p className="font-medium text-gray-900">{pedido.tamanho_nome}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">Massa</p>
-                  <p className="font-medium text-gray-900">{pedido.massa_nome}</p>
-                </div>
-              </div>
-              {pedido.recheios?.length > 0 &&
-              <div>
-                  <p className="text-sm text-gray-500">Recheios</p>
-                  <div className="flex flex-wrap gap-1 mt-1">
-                    {pedido.recheios.map((r, i) =>
-                  <Badge key={i} variant="secondary" className="bg-rose-100 text-rose-700">
-                        {r.nome}
-                      </Badge>
-                  )}
-                  </div>
-                </div>
-              }
-              <div>
-                <p className="text-sm text-gray-500">Cobertura</p>
-                <p className="font-medium text-gray-900">{pedido.cobertura_nome}</p>
-              </div>
-              {pedido.extras?.length > 0 &&
-              <div>
-                  <p className="text-sm text-gray-500">Extras</p>
-                  <div className="flex flex-wrap gap-1 mt-1">
-                    {pedido.extras.map((e, i) =>
-                  <Badge key={i} variant="outline">
-                        {e.nome}
-                        {e.observacao && ` (${e.observacao})`}
-                      </Badge>
-                  )}
-                  </div>
-                </div>
-              }
-            </div>
-          </div>
+          )}
 
           {/* Doces */}
           {pedido.doces?.length > 0 &&
@@ -212,7 +300,7 @@ export default function PedidoDetalhes({ pedido, onClose, onStatusChange }) {
           }
 
           {/* Observações */}
-          {pedido.observacoes &&
+          {hasCustomObservations &&
           <div className="space-y-3">
               <h3 className="font-semibold text-gray-900">Observações</h3>
               <div className="bg-amber-50 border border-amber-100 rounded-xl p-4">

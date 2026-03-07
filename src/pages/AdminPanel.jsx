@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import ReactQuill from 'react-quill';
 import { format, parseISO, differenceInDays, isBefore } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { appClient } from '@/api/appClient';
@@ -8,6 +9,14 @@ import { createPageUrl } from '@/utils';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle
+} from '@/components/ui/dialog';
 import {
   Select,
   SelectContent,
@@ -34,9 +43,15 @@ import {
   Search,
   Phone,
   Mail,
-  Loader2
+  Loader2,
+  Archive,
+  Bell,
+  Pencil,
+  Plus,
+  Trash2
 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
+import 'react-quill/dist/quill.snow.css';
 
 const STATUS_LABELS = {
   active: 'Ativo',
@@ -65,12 +80,56 @@ const STATUS_COLOR = {
   incomplete: 'bg-gray-100 text-gray-600 border-gray-200'
 };
 
+const QUILL_MODULES = {
+  toolbar: [
+    [{ header: [2, 3, false] }],
+    ['bold', 'italic', 'underline'],
+    [{ list: 'ordered' }, { list: 'bullet' }],
+    ['link'],
+    ['clean']
+  ]
+};
+
+const QUILL_FORMATS = [
+  'header',
+  'bold',
+  'italic',
+  'underline',
+  'list',
+  'bullet',
+  'link'
+];
+
+const normalizeRichText = (value = '') => {
+  const trimmed = String(value || '').trim();
+  if (!trimmed || trimmed === '<p><br></p>') return '';
+  return trimmed;
+};
+
+const hasRichTextContent = (value = '') => {
+  const plainText = String(value || '')
+    .replace(/<(.|\n)*?>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .trim();
+
+  return plainText.length > 0;
+};
+
+const isHtmlMessage = (value = '') => /<\/?[a-z][\s\S]*>/i.test(String(value));
+
 export default function AdminPanel() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [filtroStatus, setFiltroStatus] = useState('todos');
   const [busca, setBusca] = useState('');
   const [enviandoBrevo, setEnviandoBrevo] = useState({});
+  const [showNotificationDialog, setShowNotificationDialog] = useState(false);
+  const [editingNotification, setEditingNotification] = useState(null);
+  const [notificationForm, setNotificationForm] = useState({
+    title: '',
+    message: ''
+  });
 
   // Guard: apenas admin
   if (user && user.role !== 'admin') {
@@ -81,6 +140,12 @@ export default function AdminPanel() {
   const { data: confeitarias = [], isLoading } = useQuery({
     queryKey: ['admin-confeitarias'],
     queryFn: () => appClient.entities.Confeitaria.filter({}),
+    enabled: user?.role === 'admin'
+  });
+
+  const { data: notifications = [], isLoading: isLoadingNotifications } = useQuery({
+    queryKey: ['admin-system-notifications'],
+    queryFn: () => appClient.entities.SystemNotification.filter({}, '-published_at'),
     enabled: user?.role === 'admin'
   });
 
@@ -142,12 +207,101 @@ export default function AdminPanel() {
     return dias;
   };
 
+  const resetNotificationForm = () => {
+    setEditingNotification(null);
+    setNotificationForm({ title: '', message: '' });
+    setShowNotificationDialog(false);
+  };
+
+  const openNewNotificationDialog = () => {
+    setEditingNotification(null);
+    setNotificationForm({ title: '', message: '' });
+    setShowNotificationDialog(true);
+  };
+
+  const openEditNotificationDialog = (notification) => {
+    setEditingNotification(notification);
+    setNotificationForm({
+      title: notification.title || '',
+      message: notification.message || ''
+    });
+    setShowNotificationDialog(true);
+  };
+
+  const saveNotificationMutation = useMutation({
+    mutationFn: async () => {
+      const payload = {
+        title: notificationForm.title.trim(),
+        message: normalizeRichText(notificationForm.message),
+        updated_at: new Date().toISOString()
+      };
+
+      if (editingNotification?.id) {
+        return appClient.entities.SystemNotification.update(editingNotification.id, payload);
+      }
+
+      return appClient.entities.SystemNotification.create({
+        ...payload,
+        status: 'published',
+        created_by: user.id,
+        published_at: new Date().toISOString()
+      });
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['admin-system-notifications'] });
+      toast({ title: editingNotification ? 'Aviso atualizado' : 'Aviso publicado' });
+      resetNotificationForm();
+    },
+    onError: (error) => {
+      toast({
+        title: 'Erro ao salvar aviso',
+        description: error?.message || 'Tente novamente.',
+        variant: 'destructive'
+      });
+    }
+  });
+
+  const archiveNotificationMutation = useMutation({
+    mutationFn: (notificationId) =>
+      appClient.entities.SystemNotification.update(notificationId, {
+        status: 'archived',
+        updated_at: new Date().toISOString()
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['admin-system-notifications'] });
+      toast({ title: 'Aviso arquivado' });
+    },
+    onError: (error) => {
+      toast({
+        title: 'Erro ao arquivar aviso',
+        description: error?.message || 'Tente novamente.',
+        variant: 'destructive'
+      });
+    }
+  });
+
+  const deleteNotificationMutation = useMutation({
+    mutationFn: (notificationId) => appClient.entities.SystemNotification.delete(notificationId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['admin-system-notifications'] });
+      toast({ title: 'Aviso excluído' });
+    },
+    onError: (error) => {
+      toast({
+        title: 'Erro ao excluir aviso',
+        description: error?.message || 'Tente novamente.',
+        variant: 'destructive'
+      });
+    }
+  });
+
   return (
     <div className="space-y-6">
       <Tabs defaultValue="leads">
         <TabsList>
           <TabsTrigger value="leads">Leads & Usuários</TabsTrigger>
           <TabsTrigger value="relatorios">Relatórios</TabsTrigger>
+          <TabsTrigger value="avisos">Avisos do Sistema</TabsTrigger>
         </TabsList>
 
         {/* ─── ABA LEADS ─── */}
@@ -408,7 +562,158 @@ export default function AdminPanel() {
           </div>
 
         </TabsContent>
+
+        <TabsContent value="avisos" className="mt-6 space-y-6">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900">Avisos do Sistema</h3>
+              <p className="text-sm text-gray-500">
+                Publique novidades globais para todos os usuários autenticados.
+              </p>
+            </div>
+            <Button onClick={openNewNotificationDialog}>
+              <Plus className="w-4 h-4 mr-2" />
+              Novo aviso
+            </Button>
+          </div>
+
+          <div className="space-y-3">
+            {isLoadingNotifications ? (
+              <div className="rounded-xl border border-gray-200 bg-white px-6 py-12 text-center text-gray-400">
+                Carregando avisos...
+              </div>
+            ) : notifications.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-gray-200 bg-white px-6 py-12 text-center">
+                <Bell className="w-8 h-8 text-rose-300 mx-auto mb-3" />
+                <p className="font-medium text-gray-900">Nenhum aviso publicado</p>
+                <p className="text-sm text-gray-500 mt-1">
+                  Use esta área para informar novidades e atualizações do sistema.
+                </p>
+              </div>
+            ) : (
+              notifications.map((notification) => (
+                <div
+                  key={notification.id}
+                  className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm"
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <h4 className="font-semibold text-gray-900">{notification.title}</h4>
+                        <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${
+                          notification.status === 'published'
+                            ? 'bg-emerald-100 text-emerald-700'
+                            : 'bg-gray-100 text-gray-600'
+                        }`}>
+                          {notification.status === 'published' ? 'Publicado' : 'Arquivado'}
+                        </span>
+                      </div>
+                      {isHtmlMessage(notification.message) ? (
+                        <div
+                          className="text-sm leading-6 text-gray-600 line-clamp-3 [&_a]:text-rose-600 [&_a]:underline [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:mb-2 [&_strong]:font-semibold [&_ul]:list-disc [&_ul]:pl-5"
+                          dangerouslySetInnerHTML={{ __html: notification.message }}
+                        />
+                      ) : (
+                        <p className="whitespace-pre-wrap text-sm leading-6 text-gray-600">
+                          {notification.message}
+                        </p>
+                      )}
+                      <p className="text-xs text-gray-400">
+                        {notification.published_at
+                          ? `Publicado em ${formatarData(notification.published_at)}`
+                          : `Criado em ${formatarData(notification.created_at)}`}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => openEditNotificationDialog(notification)}
+                      >
+                        <Pencil className="w-4 h-4 mr-2" />
+                        Editar
+                      </Button>
+                      {notification.status === 'published' && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => archiveNotificationMutation.mutate(notification.id)}
+                          disabled={archiveNotificationMutation.isPending}
+                        >
+                          <Archive className="w-4 h-4 mr-2" />
+                          Arquivar
+                        </Button>
+                      )}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-red-600 hover:text-red-700"
+                        onClick={() => deleteNotificationMutation.mutate(notification.id)}
+                        disabled={deleteNotificationMutation.isPending}
+                      >
+                        <Trash2 className="w-4 h-4 mr-2" />
+                        Excluir
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </TabsContent>
       </Tabs>
+
+      <Dialog open={showNotificationDialog} onOpenChange={(open) => !open && resetNotificationForm()}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {editingNotification ? 'Editar aviso do sistema' : 'Novo aviso do sistema'}
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-700">Título</label>
+              <Input
+                value={notificationForm.title}
+                onChange={(e) => setNotificationForm((prev) => ({ ...prev, title: e.target.value }))}
+                placeholder="Ex: Nova atualização disponível"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-700">Mensagem</label>
+              <div className="rounded-lg border border-gray-200 overflow-hidden bg-white [&_.ql-container]:min-h-[180px] [&_.ql-editor]:min-h-[150px]">
+                <ReactQuill
+                  theme="snow"
+                  value={notificationForm.message}
+                  onChange={(value) => setNotificationForm((prev) => ({ ...prev, message: value }))}
+                  modules={QUILL_MODULES}
+                  formats={QUILL_FORMATS}
+                  placeholder="Descreva a novidade que os usuários devem ver no sino."
+                />
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={resetNotificationForm}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={() => saveNotificationMutation.mutate()}
+              disabled={
+                saveNotificationMutation.isPending ||
+                !notificationForm.title.trim() ||
+                !hasRichTextContent(notificationForm.message)
+              }
+            >
+              {saveNotificationMutation.isPending ? 'Salvando...' : 'Salvar'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

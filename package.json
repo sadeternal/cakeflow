@@ -11,7 +11,7 @@
     "typecheck": "tsc -p ./jsconfig.json",
     "preview": "vite preview",
     "supabase:db:push": "npx supabase db push --linked",
-    "supabase:functions:deploy": "for fn in checkSubscriptionStatus createCheckoutSession createCustomerPortal syncSubscription stripeWebhook generateWeeklyReport registerUser deleteAccount; do npx supabase functions deploy \"$fn\" --no-verify-jwt || exit 1; done"
+    "supabase:functions:deploy": "for fn in checkSubscriptionStatus createCheckoutSession createCustomerPortal syncSubscription stripeWebhook generateWeeklyReport registerUser deleteAccount syncBrevoClientContact; do npx supabase functions deploy \"$fn\" --no-verify-jwt || exit 1; done"
   },
   "dependencies": {
     "@hello-pangea/dnd": "^17.0.0",

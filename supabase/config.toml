@@ -32,3 +32,6 @@ enabled = false
 
 [functions.registerUser]
 verify_jwt = false
+
+[functions.syncBrevoClientContact]
+verify_jwt = false

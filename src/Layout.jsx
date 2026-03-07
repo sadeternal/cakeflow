@@ -23,6 +23,7 @@ import {
   ShieldCheck } from
 'lucide-react';
 import TrialExpiredModal from '@/components/TrialExpiredModal';
+import SystemNotificationsBell from '@/components/notifications/SystemNotificationsBell';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -267,6 +268,9 @@ export default function Layout({ children, currentPageName }) {
                 PAGE_TITLE_BY_ROUTE[currentPageName] ||
                 currentPageName}
               </h2>
+            </div>
+            <div className="flex items-center gap-2">
+              <SystemNotificationsBell />
             </div>
           </div>
         </header>

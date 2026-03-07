@@ -351,7 +351,8 @@ export default function Pedidos() {
                                   e.stopPropagation();
                                   updateStatusMutation.mutate({
                                     id: pedido.id,
-                                    status: statusConfig[pedido.status].next
+                                    status: statusConfig[pedido.status].next,
+                                    pedido,
                                   });
                                 }}
                                 className="cursor-pointer hover:bg-emerald-50 hover:text-emerald-700 transition-colors"
@@ -411,7 +412,7 @@ export default function Pedidos() {
           pedido={selectedPedido}
           onClose={() => setSelectedPedido(null)}
           onStatusChange={(status) => {
-            updateStatusMutation.mutate({ id: selectedPedido.id, status });
+            updateStatusMutation.mutate({ id: selectedPedido.id, status, pedido: selectedPedido });
             setSelectedPedido({ ...selectedPedido, status });
           }}
         />

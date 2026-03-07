@@ -20,6 +20,7 @@ import { Badge } from '@/components/ui/badge';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Checkbox } from '@/components/ui/checkbox';
 import { CPFInput, TelefoneInput } from '@/components/ui/masked-input';
+import { syncClientToBrevo } from '@/lib/brevoClientSync';
 import {
   Dialog,
   DialogContent,
@@ -36,20 +37,62 @@ const defaultSteps = [
   { key: 'extras', title: 'Extras' },
   { key: 'doces', title: 'Doces' },
   { key: 'salgados', title: 'Salgados' },
+  { key: 'tipo_entrega', title: 'Tipo de Entrega' },
   { key: 'entrega', title: 'Entrega' },
   { key: 'dados', title: 'Seus Dados' },
   { key: 'pagamento', title: 'Pagamento' },
   { key: 'resumo', title: 'Resumo' },
 ];
 
+const isPixPaymentName = (name = '') => name.toLowerCase().includes('pix');
+
+const normalizeFormaPagamento = (forma = {}) => {
+  const pix = isPixPaymentName(forma.nome || '');
+  const aVista = forma.a_vista === true;
+  return {
+    ...forma,
+    descricao: aVista && pix && (!forma.descricao || forma.descricao === 'À vista')
+      ? 'À vista'
+      : (forma.descricao || ''),
+    a_vista: aVista,
+    parcelamento_max: aVista ? 1 : Math.max(Number(forma.parcelamento_max) || 1, 1),
+    chave_pix: forma.chave_pix || '',
+  };
+};
+
+const fallbackFormasPagamento = [
+  { id: '', nome: 'Pix', descricao: 'À vista', a_vista: true, parcelamento_max: 1, chave_pix: '' },
+  { id: '', nome: 'Cartão', descricao: '', a_vista: false, parcelamento_max: 1, chave_pix: '' },
+  { id: '', nome: 'Dinheiro', descricao: '', a_vista: true, parcelamento_max: 1, chave_pix: '' },
+].map(normalizeFormaPagamento);
+
+const normalizePublicSteps = (etapasConfiguradas) => {
+  const etapasBase = Array.isArray(etapasConfiguradas) && etapasConfiguradas.length > 0
+    ? etapasConfiguradas
+    : defaultSteps.map((step) => ({ ...step, ativo: true, label: step.title }));
+
+  if (etapasBase.some((step) => step.key === 'tipo_entrega')) {
+    return etapasBase;
+  }
+
+  const etapaTipoEntrega = { key: 'tipo_entrega', label: 'Tipo de Entrega', ativo: true };
+  const entregaIndex = etapasBase.findIndex((step) => step.key === 'entrega');
+
+  if (entregaIndex === -1) {
+    return [...etapasBase, etapaTipoEntrega];
+  }
+
+  const novasEtapas = [...etapasBase];
+  novasEtapas.splice(entregaIndex, 0, etapaTipoEntrega);
+  return novasEtapas;
+};
+
 export default function PedidoPublico({ confeitaria, onClose }) {
   const queryClient = useQueryClient();
 
   // Calcular as etapas ativas com base na configuração da confeitaria
   const steps = React.useMemo(() => {
-    const configuradas = Array.isArray(confeitaria?.etapas_pedido) && confeitaria.etapas_pedido.length > 0
-      ? confeitaria.etapas_pedido
-      : defaultSteps.map((s, i) => ({ ...s, ativo: true }));
+    const configuradas = normalizePublicSteps(confeitaria?.etapas_pedido);
 
     return configuradas
       .filter(s => s.ativo !== false)
@@ -83,10 +126,14 @@ export default function PedidoPublico({ confeitaria, onClose }) {
     salgados: [],
     deseja_doces: false,
     deseja_salgados: false,
+    tipo_entrega: '',
     data_entrega: '',
     horario_entrega: '',
     observacoes: '',
     forma_pagamento: '',
+    forma_pagamento_id: '',
+    forma_pagamento_nome: '',
+    parcelas: 1,
     valor_tamanho: 0,
     valor_massa: 0,
     valor_recheios: 0,
@@ -179,6 +226,12 @@ export default function PedidoPublico({ confeitaria, onClose }) {
     }),
     enabled: !!confeitaria?.id,
   });
+  const paymentOptions = (formasPagamento.length > 0 ? formasPagamento : fallbackFormasPagamento).map(normalizeFormaPagamento);
+  const selectedPayment = paymentOptions.find((forma) =>
+    (forma.id && forma.id === pedido.forma_pagamento_id) ||
+    forma.nome === (pedido.forma_pagamento_nome || pedido.forma_pagamento)
+  ) || null;
+  const shouldShowInstallments = selectedPayment && !selectedPayment.a_vista && selectedPayment.parcelamento_max > 1;
 
   // Calculate totals
   useEffect(() => {
@@ -217,7 +270,7 @@ export default function PedidoPublico({ confeitaria, onClose }) {
     let mensagem = `*Novo Pedido Personalizado - ORÇAMENTO*\n\n`;
     mensagem += `*Cliente:* ${cliente.nome}\n`;
     mensagem += `*Telefone:* ${cliente.telefone}\n`;
-    mensagem += `*Forma de Pagamento:* ${pedido.forma_pagamento}\n\n`;
+    mensagem += `*Forma de Pagamento:* ${pedido.forma_pagamento_nome || pedido.forma_pagamento}${pedido.parcelas > 1 ? ` em ${pedido.parcelas}x` : ''}\n\n`;
 
     mensagem += `*Bolo:*\n`;
     mensagem += `- Tamanho: ${pedido.tamanho_nome} (R$ ${pedido.valor_tamanho?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })})\n`;
@@ -249,6 +302,7 @@ export default function PedidoPublico({ confeitaria, onClose }) {
     }
 
     mensagem += `\n*Entrega:*\n`;
+    mensagem += `- Tipo: ${pedido.tipo_entrega === 'entrega' ? 'Delivery' : pedido.tipo_entrega === 'retirada' ? 'Retirada no local' : 'Não informado'}\n`;
     mensagem += `- Data: ${pedido.data_entrega ? format(parseISO(pedido.data_entrega), "dd/MM/yyyy") : 'Não informada'}\n`;
     if (pedido.horario_entrega) {
       mensagem += `- Horário: ${pedido.horario_entrega}\n`;
@@ -280,7 +334,7 @@ export default function PedidoPublico({ confeitaria, onClose }) {
       await appClient.functions.invokePublicRpc('catalog_create_pedido', {
         payload: {
           ...pedido,
-          tipo_entrega: pedido.data_entrega ? 'entrega' : 'retirada',
+          tipo_entrega: pedido.tipo_entrega || null,
           valor_itens: pedido.valor_tamanho + pedido.valor_massa + pedido.valor_recheios + pedido.valor_cobertura + pedido.valor_extras + pedido.valor_doces + pedido.valor_salgados,
           confeitaria_id: confeitaria.id,
           cliente_id: null,
@@ -290,8 +344,22 @@ export default function PedidoPublico({ confeitaria, onClose }) {
           observacoes: observacoesComCpf,
           status: 'orcamento',
           tipo: 'personalizado',
+          forma_pagamento: pedido.forma_pagamento_nome || pedido.forma_pagamento,
+          forma_pagamento_id: pedido.forma_pagamento_id || null,
+          forma_pagamento_nome: pedido.forma_pagamento_nome || pedido.forma_pagamento || null,
+          parcelas: pedido.parcelas || 1,
         }
       });
+
+      await syncClientToBrevo(
+        {
+          confeitaria_id: confeitaria.id,
+          nome: cliente.nome,
+          telefone: cliente.telefone,
+          email: '',
+        },
+        { isPublic: true }
+      );
 
       // Invalidar queries para atualizar lista de pedidos em tempo real
       queryClient.invalidateQueries({ queryKey: ['pedidos'] });
@@ -317,6 +385,7 @@ export default function PedidoPublico({ confeitaria, onClose }) {
       case 'extras': return true;
       case 'doces': return true;
       case 'salgados': return true;
+      case 'tipo_entrega': return pedido.tipo_entrega;
       case 'entrega': return pedido.data_entrega && !diasBloqueadosMap.has(pedido.data_entrega) && !limiteAtingido;
       case 'dados': return cliente.nome && cliente.telefone;
       case 'pagamento': return pedido.forma_pagamento;
@@ -977,6 +1046,58 @@ export default function PedidoPublico({ confeitaria, onClose }) {
             </div>
           )}
 
+          {/* Step: Tipo de Entrega */}
+          {steps.find(s => s.id === currentStep)?.key === 'tipo_entrega' && (
+            <RadioGroup
+              value={pedido.tipo_entrega}
+              onValueChange={(value) => setPedido({ ...pedido, tipo_entrega: value })}
+              className="grid gap-3"
+            >
+              <label
+                className={`flex items-center justify-between p-4 rounded-xl cursor-pointer transition-colors ${pedido.tipo_entrega === 'entrega'
+                  ? 'border-2'
+                  : 'bg-gray-50 hover:bg-gray-100 border-2 border-transparent'
+                  }`}
+                style={{
+                  backgroundColor: pedido.tipo_entrega === 'entrega' ? `${corPrincipal}10` : undefined,
+                  borderColor: pedido.tipo_entrega === 'entrega' ? corPrincipal : undefined,
+                }}
+              >
+                <div className="flex items-center gap-3">
+                  <RadioGroupItem value="entrega" />
+                  <div>
+                    <p className="font-medium text-gray-900">Delivery</p>
+                    <p className="text-sm text-gray-500">Entrega no endereço combinado</p>
+                  </div>
+                </div>
+                {confeitaria?.taxa_delivery > 0 && (
+                  <span className="font-bold" style={{ color: corPrincipal }}>
+                    + R$ {Number(confeitaria.taxa_delivery || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </span>
+                )}
+              </label>
+
+              <label
+                className={`flex items-center justify-between p-4 rounded-xl cursor-pointer transition-colors ${pedido.tipo_entrega === 'retirada'
+                  ? 'border-2'
+                  : 'bg-gray-50 hover:bg-gray-100 border-2 border-transparent'
+                  }`}
+                style={{
+                  backgroundColor: pedido.tipo_entrega === 'retirada' ? `${corPrincipal}10` : undefined,
+                  borderColor: pedido.tipo_entrega === 'retirada' ? corPrincipal : undefined,
+                }}
+              >
+                <div className="flex items-center gap-3">
+                  <RadioGroupItem value="retirada" />
+                  <div>
+                    <p className="font-medium text-gray-900">Retirada no local</p>
+                    <p className="text-sm text-gray-500">Retirada na confeitaria na data escolhida</p>
+                  </div>
+                </div>
+              </label>
+            </RadioGroup>
+          )}
+
           {/* Step: Entrega */}
           {steps.find(s => s.id === currentStep)?.key === 'entrega' && (
             <div className="space-y-4">
@@ -1062,46 +1183,70 @@ export default function PedidoPublico({ confeitaria, onClose }) {
             <div className="space-y-4">
               <Label>Forma de Pagamento *</Label>
               <RadioGroup
-                value={pedido.forma_pagamento}
-                onValueChange={(value) => setPedido({ ...pedido, forma_pagamento: value })}
+                value={pedido.forma_pagamento_nome || pedido.forma_pagamento}
+                onValueChange={(value) => {
+                  const forma = paymentOptions.find((item) => item.nome === value);
+                  if (!forma) return;
+                  setPedido({
+                    ...pedido,
+                    forma_pagamento: forma.nome,
+                    forma_pagamento_id: forma.id || '',
+                    forma_pagamento_nome: forma.nome,
+                    parcelas: forma.a_vista ? 1 : Math.min(pedido.parcelas || 1, forma.parcelamento_max),
+                  });
+                }}
                 className="grid gap-3"
               >
-                {formasPagamento.length > 0 ? (
-                  formasPagamento.map((forma) => (
-                    <label
-                      key={forma.id}
-                      className={`flex items-center gap-3 p-4 rounded-xl cursor-pointer transition-colors ${pedido.forma_pagamento === forma.nome
-                        ? 'border-2'
-                        : 'bg-gray-50 hover:bg-gray-100 border-2 border-transparent'
-                        }`}
-                      style={{
-                        backgroundColor: pedido.forma_pagamento === forma.nome ? `${corPrincipal}10` : undefined,
-                        borderColor: pedido.forma_pagamento === forma.nome ? corPrincipal : undefined,
-                      }}
-                    >
-                      <RadioGroupItem value={forma.nome} />
+                {paymentOptions.map((forma) => (
+                  <label
+                    key={`${forma.id || 'fallback'}-${forma.nome}`}
+                    className={`flex items-start gap-3 p-4 rounded-xl cursor-pointer transition-colors ${(pedido.forma_pagamento_nome || pedido.forma_pagamento) === forma.nome
+                      ? 'border-2'
+                      : 'bg-gray-50 hover:bg-gray-100 border-2 border-transparent'
+                      }`}
+                    style={{
+                      backgroundColor: (pedido.forma_pagamento_nome || pedido.forma_pagamento) === forma.nome ? `${corPrincipal}10` : undefined,
+                      borderColor: (pedido.forma_pagamento_nome || pedido.forma_pagamento) === forma.nome ? corPrincipal : undefined,
+                    }}
+                  >
+                    <RadioGroupItem value={forma.nome} className="mt-1" />
+                    <div>
                       <span className="font-medium text-gray-900">{forma.nome}</span>
-                    </label>
-                  ))
-                ) : (
-                  ['Pix', 'Cartão', 'Dinheiro'].map((forma) => (
-                    <label
-                      key={forma}
-                      className={`flex items-center gap-3 p-4 rounded-xl cursor-pointer transition-colors ${pedido.forma_pagamento === forma
-                        ? 'border-2'
-                        : 'bg-gray-50 hover:bg-gray-100 border-2 border-transparent'
-                        }`}
-                      style={{
-                        backgroundColor: pedido.forma_pagamento === forma ? `${corPrincipal}10` : undefined,
-                        borderColor: pedido.forma_pagamento === forma ? corPrincipal : undefined,
-                      }}
-                    >
-                      <RadioGroupItem value={forma} />
-                      <span className="font-medium text-gray-900">{forma}</span>
-                    </label>
-                  ))
-                )}
+                      {forma.descricao && (
+                        <p className="text-sm text-gray-500 mt-1">{forma.descricao}</p>
+                      )}
+                    </div>
+                  </label>
+                ))}
               </RadioGroup>
+
+              {shouldShowInstallments && (
+                <div>
+                  <Label>Parcelas</Label>
+                  <RadioGroup
+                    value={String(pedido.parcelas || 1)}
+                    onValueChange={(value) => setPedido({ ...pedido, parcelas: Number(value) || 1 })}
+                    className="grid grid-cols-2 gap-2 mt-2 sm:grid-cols-3"
+                  >
+                    {Array.from({ length: selectedPayment.parcelamento_max }, (_, index) => index + 1).map((parcela) => (
+                      <label
+                        key={parcela}
+                        className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-colors ${Number(pedido.parcelas || 1) === parcela
+                          ? 'border-2'
+                          : 'bg-gray-50 hover:bg-gray-100 border-2 border-transparent'
+                          }`}
+                        style={{
+                          backgroundColor: Number(pedido.parcelas || 1) === parcela ? `${corPrincipal}10` : undefined,
+                          borderColor: Number(pedido.parcelas || 1) === parcela ? corPrincipal : undefined,
+                        }}
+                      >
+                        <RadioGroupItem value={String(parcela)} />
+                        <span className="font-medium text-gray-900">{parcela}x</span>
+                      </label>
+                    ))}
+                  </RadioGroup>
+                </div>
+              )}
             </div>
           )}
 
@@ -1178,6 +1323,9 @@ export default function PedidoPublico({ confeitaria, onClose }) {
                 <div className="p-4 bg-gray-50 rounded-xl">
                   <p className="text-sm text-gray-500">Entrega</p>
                   <p className="font-semibold text-gray-900">
+                    {pedido.tipo_entrega === 'entrega' ? 'Delivery' : pedido.tipo_entrega === 'retirada' ? 'Retirada no local' : 'Não informado'}
+                  </p>
+                  <p className="font-semibold text-gray-900 mt-1">
                     {pedido.data_entrega && format(parseISO(pedido.data_entrega), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
                     {pedido.horario_entrega && ` às ${pedido.horario_entrega}`}
                   </p>
@@ -1185,7 +1333,13 @@ export default function PedidoPublico({ confeitaria, onClose }) {
 
                 <div className="p-4 bg-gray-50 rounded-xl">
                   <p className="text-sm text-gray-500">Pagamento</p>
-                  <p className="font-semibold text-gray-900">{pedido.forma_pagamento}</p>
+                  <p className="font-semibold text-gray-900">
+                    {pedido.forma_pagamento_nome || pedido.forma_pagamento}
+                    {pedido.parcelas > 1 ? ` em ${pedido.parcelas}x` : ''}
+                  </p>
+                  {selectedPayment?.descricao && (
+                    <p className="text-sm text-gray-500 mt-1">{selectedPayment.descricao}</p>
+                  )}
                 </div>
               </div>
 

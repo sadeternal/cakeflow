@@ -3,7 +3,8 @@ import { appClient } from '@/api/appClient';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { createPageUrl } from '@/utils';
 import { useAuth } from '@/lib/AuthContext';
-import { format, differenceInDays, parseISO } from 'date-fns';
+import { syncClientToBrevo } from '@/lib/brevoClientSync';
+import { format, differenceInDays, parseISO, addMonths } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
   ChevronLeft,
@@ -14,10 +15,15 @@ import {
   Cookie,
   Sparkles,
   Calendar,
+  CreditCard,
   Check,
   AlertCircle,
   Plus,
-  Search
+  Search,
+  Package,
+  Minus,
+  ShoppingCart,
+  Truck
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -36,7 +42,7 @@ import {
 } from "@/components/ui/dialog";
 import { Link } from 'react-router-dom';
 
-const steps = [
+const stepsPersonalizado = [
   { id: 1, title: 'Cliente', icon: User },
   { id: 2, title: 'Tamanho', icon: Cake },
   { id: 3, title: 'Massa', icon: Layers },
@@ -44,19 +50,56 @@ const steps = [
   { id: 5, title: 'Cobertura', icon: Sparkles },
   { id: 6, title: 'Extras', icon: Sparkles },
   { id: 7, title: 'Entrega', icon: Calendar },
-  { id: 8, title: 'Resumo', icon: Check },
+  { id: 8, title: 'Pagamento', icon: CreditCard },
+  { id: 9, title: 'Resumo', icon: Check },
 ];
+
+const stepsProdutoPronto = [
+  { id: 1, title: 'Cliente', icon: User },
+  { id: 2, title: 'Produtos', icon: ShoppingCart },
+  { id: 3, title: 'Entrega', icon: Calendar },
+  { id: 4, title: 'Pagamento', icon: CreditCard },
+  { id: 5, title: 'Resumo', icon: Check },
+];
+
+const isPixPaymentName = (name = '') => name.toLowerCase().includes('pix');
+
+const normalizeFormaPagamento = (forma = {}) => {
+  const pix = isPixPaymentName(forma.nome || '');
+  const aVista = forma.a_vista === true;
+  return {
+    ...forma,
+    descricao: aVista && pix && (!forma.descricao || forma.descricao === 'À vista')
+      ? 'À vista'
+      : (forma.descricao || ''),
+    a_vista: aVista,
+    parcelamento_max: aVista ? 1 : Math.max(Number(forma.parcelamento_max) || 1, 1),
+    chave_pix: forma.chave_pix || '',
+  };
+};
+
+const fallbackFormasPagamento = [
+  { id: '', nome: 'Pix', descricao: 'À vista', a_vista: true, parcelamento_max: 1, chave_pix: '' },
+  { id: '', nome: 'Cartão', descricao: '', a_vista: false, parcelamento_max: 1, chave_pix: '' },
+  { id: '', nome: 'Dinheiro', descricao: '', a_vista: true, parcelamento_max: 1, chave_pix: '' },
+].map(normalizeFormaPagamento);
 
 export default function NovoPedido() {
   const { user } = useAuth();
   const [confeitaria, setConfeitaria] = useState(null);
+  const [tipoPedido, setTipoPedido] = useState(null); // null = seleção, 'personalizado', 'produto_pronto'
   const [currentStep, setCurrentStep] = useState(1);
   const [showNewClientDialog, setShowNewClientDialog] = useState(false);
   const [clienteSearch, setClienteSearch] = useState('');
+  const [carrinho, setCarrinho] = useState([]);
+  const [produtoSearch, setProdutoSearch] = useState('');
   const queryClient = useQueryClient();
   const params = new URLSearchParams(window.location.search);
   const editId = params.get('editId');
+  const preselectedClienteId = params.get('clienteId');
   const isEditing = !!editId;
+
+  const steps = tipoPedido === 'produto_pronto' ? stepsProdutoPronto : stepsPersonalizado;
 
   const [pedido, setPedido] = useState({
     cliente_id: '',
@@ -73,6 +116,13 @@ export default function NovoPedido() {
     data_entrega: '',
     horario_entrega: '',
     observacoes: '',
+    tipo_entrega: '',
+    endereco_entrega: '',
+    valor_delivery: 0,
+    forma_pagamento: '',
+    forma_pagamento_id: '',
+    forma_pagamento_nome: '',
+    parcelas: 1,
     valor_tamanho: 0,
     valor_massa: 0,
     valor_recheios: 0,
@@ -144,6 +194,18 @@ export default function NovoPedido() {
     enabled: !!user?.confeitaria_id,
   });
 
+  const { data: produtos = [] } = useQuery({
+    queryKey: ['produtos', user?.confeitaria_id],
+    queryFn: () => appClient.entities.Produto.filter({ confeitaria_id: user.confeitaria_id, disponivel: true }),
+    enabled: !!user?.confeitaria_id && tipoPedido === 'produto_pronto',
+  });
+
+  const { data: formasPagamento = [] } = useQuery({
+    queryKey: ['formasPagamento', user?.confeitaria_id],
+    queryFn: () => appClient.entities.FormaPagamento.filter({ confeitaria_id: user.confeitaria_id, ativo: true }),
+    enabled: !!user?.confeitaria_id,
+  });
+
   const { data: pedidoParaEditar } = useQuery({
     queryKey: ['pedido-editar', editId],
     queryFn: async () => {
@@ -155,6 +217,7 @@ export default function NovoPedido() {
 
   useEffect(() => {
     if (!pedidoParaEditar) return;
+    setTipoPedido(pedidoParaEditar.tipo || 'personalizado');
     setPedido({
       cliente_id:       pedidoParaEditar.cliente_id       || '',
       cliente_nome:     pedidoParaEditar.cliente_nome     || '',
@@ -170,6 +233,13 @@ export default function NovoPedido() {
       data_entrega:     pedidoParaEditar.data_entrega     || '',
       horario_entrega:  pedidoParaEditar.horario_entrega  || '',
       observacoes:      pedidoParaEditar.observacoes      || '',
+      tipo_entrega:     pedidoParaEditar.tipo_entrega     || '',
+      endereco_entrega: pedidoParaEditar.endereco_entrega || '',
+      valor_delivery:   pedidoParaEditar.valor_delivery   || 0,
+      forma_pagamento:  pedidoParaEditar.forma_pagamento  || '',
+      forma_pagamento_id: pedidoParaEditar.forma_pagamento_id || '',
+      forma_pagamento_nome: pedidoParaEditar.forma_pagamento_nome || pedidoParaEditar.forma_pagamento || '',
+      parcelas: Number(pedidoParaEditar.parcelas) || 1,
       valor_tamanho:    pedidoParaEditar.valor_tamanho    || 0,
       valor_massa:      pedidoParaEditar.valor_massa      || 0,
       valor_recheios:   pedidoParaEditar.valor_recheios   || 0,
@@ -180,13 +250,42 @@ export default function NovoPedido() {
     });
   }, [pedidoParaEditar]);
 
+  useEffect(() => {
+    if (isEditing || !preselectedClienteId || clientes.length === 0) return;
+
+    const clientePreselecionado = clientes.find((cliente) => cliente.id === preselectedClienteId);
+    if (!clientePreselecionado) return;
+
+    setPedido((prev) => {
+      if (prev.cliente_id === clientePreselecionado.id) return prev;
+      return {
+        ...prev,
+        cliente_id: clientePreselecionado.id,
+        cliente_nome: clientePreselecionado.nome || '',
+        cliente_telefone: clientePreselecionado.telefone || '',
+      };
+    });
+  }, [isEditing, preselectedClienteId, clientes]);
+
   // Mutations
   const createClientMutation = useMutation({
-    mutationFn: (data) => appClient.entities.Cliente.create({
-      ...data,
-      confeitaria_id: user.confeitaria_id,
-    }),
-    onSuccess: (client) => {
+    mutationFn: async (data) => {
+      const client = await appClient.entities.Cliente.create({
+        ...data,
+        confeitaria_id: user.confeitaria_id,
+      });
+
+      const brevoResult = await syncClientToBrevo({
+        cliente_id: client.id,
+        confeitaria_id: user.confeitaria_id,
+        nome: client.nome,
+        telefone: client.telefone,
+        email: client.email
+      });
+
+      return { client, brevoSynced: brevoResult.success };
+    },
+    onSuccess: ({ client, brevoSynced }) => {
       queryClient.invalidateQueries({ queryKey: ['clientes'] });
       setPedido({
         ...pedido,
@@ -196,6 +295,9 @@ export default function NovoPedido() {
       });
       setShowNewClientDialog(false);
       setNewClient({ nome: '', telefone: '', email: '' });
+      if (brevoSynced === false) {
+        console.warn('[brevo] Cliente criado no Novo Pedido sem sincronizar com o Brevo');
+      }
     },
   });
 
@@ -207,16 +309,56 @@ export default function NovoPedido() {
           confeitaria_id: user.confeitaria_id,
         });
       }
+
+      if (tipoPedido === 'produto_pronto') {
+        return appClient.entities.Pedido.create({
+          ...pedido,
+          confeitaria_id: user.confeitaria_id,
+          numero: null,
+          status: 'orcamento',
+          tipo: 'produto_pronto',
+          valor_total: totalProdutos,
+          produtos_catalogo: carrinho.map(item => ({
+            id: item.id,
+            nome: item.nome,
+            preco: item.preco,
+            quantidade: item.quantidade,
+          })),
+        });
+      }
+
       return appClient.entities.Pedido.create({
         ...pedido,
         confeitaria_id: user.confeitaria_id,
-        numero: null, // o trigger assign_pedido_numero no banco atribui o número automaticamente
+        numero: null,
         status: 'orcamento',
         tipo: 'personalizado',
       });
     },
-    onSuccess: () => {
+    onSuccess: async (novoPedido) => {
+      // Criar parcelas de parcelamento
+      if (!isEditing && pedido.forma_pagamento_id) {
+        const numParcelas = pedido.parcelas || 1;
+        const valorTotal = tipoPedido === 'produto_pronto' ? totalProdutos : (pedido.valor_total || 0);
+        const valorParcela = Math.round((valorTotal / numParcelas) * 100) / 100;
+        const dataBase = pedido.data_entrega ? parseISO(pedido.data_entrega) : new Date();
+        try {
+          for (let i = 1; i <= numParcelas; i++) {
+            await appClient.entities.ParcelamentoPedido.create({
+              pedido_id: novoPedido.id,
+              numero_parcela: i,
+              valor: valorParcela,
+              data_vencimento: format(addMonths(dataBase, i - 1), 'yyyy-MM-dd'),
+              confeitaria_id: user.confeitaria_id,
+              status: 'pendente',
+            });
+          }
+        } catch (e) {
+          console.error('Erro ao criar parcelas:', e);
+        }
+      }
       queryClient.invalidateQueries({ queryKey: ['pedidos'] });
+      queryClient.invalidateQueries({ queryKey: ['parcelamentos'] });
       window.location.href = createPageUrl('Pedidos');
     },
   });
@@ -248,6 +390,37 @@ export default function NovoPedido() {
 
   const selectedTamanho = tamanhos.find(t => t.id === pedido.tamanho_id);
   const maxRecheios = selectedTamanho?.max_recheios || 2;
+  const paymentOptions = (formasPagamento.length > 0 ? formasPagamento : fallbackFormasPagamento).map(normalizeFormaPagamento);
+  const selectedPayment = paymentOptions.find((forma) =>
+    (forma.id && forma.id === pedido.forma_pagamento_id) ||
+    forma.nome === (pedido.forma_pagamento_nome || pedido.forma_pagamento)
+  ) || null;
+  const shouldShowInstallments = selectedPayment && !selectedPayment.a_vista && selectedPayment.parcelamento_max > 1;
+
+  // Carrinho (produto pronto)
+  const subtotalProdutos = carrinho.reduce((acc, item) => acc + (item.preco * item.quantidade), 0);
+  const totalProdutos = subtotalProdutos + (pedido.valor_delivery || 0);
+
+  const addToCarrinho = (produto) => {
+    setCarrinho(prev => {
+      const existing = prev.find(p => p.id === produto.id);
+      if (existing) {
+        return prev.map(p => p.id === produto.id ? { ...p, quantidade: p.quantidade + 1 } : p);
+      }
+      return [...prev, { id: produto.id, nome: produto.nome, preco: produto.preco || 0, quantidade: 1 }];
+    });
+  };
+
+  const updateQuantidade = (produtoId, delta) => {
+    setCarrinho(prev => prev
+      .map(p => p.id === produtoId ? { ...p, quantidade: p.quantidade + delta } : p)
+      .filter(p => p.quantidade > 0)
+    );
+  };
+
+  const filteredProdutos = produtos.filter(p =>
+    p.nome?.toLowerCase().includes(produtoSearch.toLowerCase())
+  );
 
   const filteredClientes = clientes.filter(c =>
     c.nome?.toLowerCase().includes(clienteSearch.toLowerCase()) ||
@@ -255,6 +428,15 @@ export default function NovoPedido() {
   );
 
   const canProceed = () => {
+    if (tipoPedido === 'produto_pronto') {
+      switch (currentStep) {
+        case 1: return pedido.cliente_nome && pedido.cliente_telefone;
+        case 2: return carrinho.length > 0;
+        case 3: return pedido.data_entrega && pedido.tipo_entrega;
+        case 4: return pedido.forma_pagamento;
+        default: return true;
+      }
+    }
     switch (currentStep) {
       case 1: return pedido.cliente_nome && pedido.cliente_telefone;
       case 2: return pedido.tamanho_id;
@@ -263,23 +445,79 @@ export default function NovoPedido() {
       case 5: return pedido.cobertura_id;
       case 6: return true;
       case 7: return pedido.data_entrega;
+      case 8: return pedido.forma_pagamento;
       default: return true;
     }
   };
 
   if (!user) return null;
 
+  // Tela de seleção de tipo de pedido
+  if (!tipoPedido && !isEditing) {
+    return (
+      <div className="max-w-4xl mx-auto">
+        <div className="mb-8">
+          <div className="flex items-center justify-between mb-4">
+            <Link to={createPageUrl('Pedidos')}>
+              <Button variant="ghost" size="sm">
+                <ChevronLeft className="w-4 h-4 mr-1" />
+                Voltar
+              </Button>
+            </Link>
+          </div>
+          <h2 className="text-xl font-bold text-gray-900 text-center">Tipo de Pedido</h2>
+          <p className="text-sm text-gray-500 text-center mt-1">Selecione o tipo de pedido que deseja criar</p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <button
+            onClick={() => setTipoPedido('personalizado')}
+            className="p-8 rounded-2xl border-2 border-transparent bg-white shadow-lg hover:border-rose-500 hover:shadow-xl transition-all text-left group"
+          >
+            <div className="p-4 rounded-xl bg-rose-100 w-fit mb-4 group-hover:bg-rose-200 transition-colors">
+              <Cake className="w-8 h-8 text-rose-600" />
+            </div>
+            <h3 className="text-lg font-bold text-gray-900">Bolo Personalizado</h3>
+            <p className="text-sm text-gray-500 mt-2">
+              Monte o bolo escolhendo tamanho, massa, recheios, cobertura e extras
+            </p>
+          </button>
+
+          <button
+            onClick={() => setTipoPedido('produto_pronto')}
+            className="p-8 rounded-2xl border-2 border-transparent bg-white shadow-lg hover:border-rose-500 hover:shadow-xl transition-all text-left group"
+          >
+            <div className="p-4 rounded-xl bg-amber-100 w-fit mb-4 group-hover:bg-amber-200 transition-colors">
+              <Package className="w-8 h-8 text-amber-600" />
+            </div>
+            <h3 className="text-lg font-bold text-gray-900">Produto Pronto</h3>
+            <p className="text-sm text-gray-500 mt-2">
+              Selecione produtos prontos do catálogo para adicionar ao pedido
+            </p>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-4xl mx-auto">
       {/* Progress */}
       <div className="mb-8">
         <div className="flex items-center justify-between mb-4">
-          <Link to={createPageUrl('Pedidos')}>
-            <Button variant="ghost" size="sm">
+          {currentStep === 1 && !isEditing ? (
+            <Button variant="ghost" size="sm" onClick={() => { setTipoPedido(null); setCurrentStep(1); }}>
               <ChevronLeft className="w-4 h-4 mr-1" />
-              Voltar
+              Tipo de Pedido
             </Button>
-          </Link>
+          ) : (
+            <Link to={createPageUrl('Pedidos')}>
+              <Button variant="ghost" size="sm">
+                <ChevronLeft className="w-4 h-4 mr-1" />
+                Voltar
+              </Button>
+            </Link>
+          )}
           <span className="text-sm text-gray-500">
             Passo {currentStep} de {steps.length}
           </span>
@@ -309,7 +547,7 @@ export default function NovoPedido() {
       {/* Step Content */}
       <Card className="border-0 shadow-xl shadow-gray-100/50 mb-6">
         <CardContent className="p-6">
-          {/* Step 1: Cliente */}
+          {/* Step 1 (both): Cliente */}
           {currentStep === 1 && (
             <div className="space-y-4">
               <div className="flex gap-3">
@@ -383,8 +621,9 @@ export default function NovoPedido() {
             </div>
           )}
 
+          {/* === PERSONALIZADO: Steps 2-6 === */}
           {/* Step 2: Tamanho */}
-          {currentStep === 2 && (
+          {tipoPedido === 'personalizado' && currentStep === 2 && (
             <RadioGroup
               value={pedido.tamanho_id}
               onValueChange={(value) => {
@@ -426,7 +665,7 @@ export default function NovoPedido() {
           )}
 
           {/* Step 3: Massa */}
-          {currentStep === 3 && (
+          {tipoPedido === 'personalizado' && currentStep === 3 && (
             <RadioGroup
               value={pedido.massa_id}
               onValueChange={(value) => {
@@ -471,7 +710,7 @@ export default function NovoPedido() {
           )}
 
           {/* Step 4: Recheios */}
-          {currentStep === 4 && (
+          {tipoPedido === 'personalizado' && currentStep === 4 && (
             <div className="space-y-4">
               <div className="flex items-center justify-between p-3 bg-amber-50 rounded-lg">
                 <span className="text-sm text-amber-800">
@@ -551,7 +790,7 @@ export default function NovoPedido() {
           )}
 
           {/* Step 5: Cobertura */}
-          {currentStep === 5 && (
+          {tipoPedido === 'personalizado' && currentStep === 5 && (
             <RadioGroup
               value={pedido.cobertura_id}
               onValueChange={(value) => {
@@ -596,7 +835,7 @@ export default function NovoPedido() {
           )}
 
           {/* Step 6: Extras */}
-          {currentStep === 6 && (
+          {tipoPedido === 'personalizado' && currentStep === 6 && (
             <div className="space-y-3">
               <p className="text-sm text-gray-500 mb-4">Selecione os extras desejados (opcional)</p>
               {extras.map((extra) => {
@@ -661,8 +900,299 @@ export default function NovoPedido() {
             </div>
           )}
 
-          {/* Step 7: Entrega */}
-          {currentStep === 7 && (
+          {/* === PRODUTO PRONTO: Step 2 - Produtos === */}
+          {tipoPedido === 'produto_pronto' && currentStep === 2 && (
+            <div className="space-y-4">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <Input
+                  placeholder="Buscar produto..."
+                  value={produtoSearch}
+                  onChange={(e) => setProdutoSearch(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
+
+              {carrinho.length > 0 && (
+                <div className="p-4 bg-rose-50 rounded-xl space-y-2">
+                  <p className="text-sm font-semibold text-gray-700">Carrinho</p>
+                  {carrinho.map((item) => (
+                    <div key={item.id} className="flex items-center justify-between">
+                      <span className="text-sm text-gray-900">{item.nome}</span>
+                      <div className="flex items-center gap-2">
+                        <Button size="icon" variant="ghost" className="w-7 h-7" onClick={() => updateQuantidade(item.id, -1)}>
+                          <Minus className="w-3 h-3" />
+                        </Button>
+                        <span className="text-sm font-medium w-6 text-center">{item.quantidade}</span>
+                        <Button size="icon" variant="ghost" className="w-7 h-7" onClick={() => updateQuantidade(item.id, 1)}>
+                          <Plus className="w-3 h-3" />
+                        </Button>
+                        <span className="text-sm font-semibold text-rose-600 ml-2">
+                          R$ {(item.preco * item.quantidade).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                  <div className="pt-2 border-t border-rose-200 flex justify-between font-bold">
+                    <span>Subtotal</span>
+                    <span className="text-rose-600">R$ {subtotalProdutos.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-2 max-h-64 overflow-y-auto">
+                {filteredProdutos.map((produto) => (
+                  <button
+                    key={produto.id}
+                    onClick={() => addToCarrinho(produto)}
+                    className="w-full flex items-center justify-between p-4 rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors text-left"
+                  >
+                    <div>
+                      <p className="font-medium text-gray-900">{produto.nome}</p>
+                      {produto.descricao && <p className="text-sm text-gray-500">{produto.descricao}</p>}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-rose-600">
+                        R$ {(produto.preco || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      </span>
+                      <Plus className="w-4 h-4 text-gray-400" />
+                    </div>
+                  </button>
+                ))}
+                {filteredProdutos.length === 0 && (
+                  <p className="text-gray-500 text-center py-4">Nenhum produto encontrado</p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* === PRODUTO PRONTO: Step 3 - Entrega === */}
+          {tipoPedido === 'produto_pronto' && currentStep === 3 && (
+            <div className="space-y-4">
+              <Label>Tipo de Entrega *</Label>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  onClick={() => setPedido({ ...pedido, tipo_entrega: 'retirada', valor_delivery: 0 })}
+                  className={`p-4 rounded-xl text-center transition-colors ${
+                    pedido.tipo_entrega === 'retirada'
+                      ? 'bg-rose-100 border-2 border-rose-500'
+                      : 'bg-gray-50 hover:bg-gray-100 border-2 border-transparent'
+                  }`}
+                >
+                  <Package className="w-6 h-6 mx-auto mb-2 text-gray-600" />
+                  <p className="font-medium">Retirada</p>
+                </button>
+                <button
+                  onClick={() => setPedido({ ...pedido, tipo_entrega: 'delivery', valor_delivery: confeitaria?.taxa_delivery || 0 })}
+                  className={`p-4 rounded-xl text-center transition-colors ${
+                    pedido.tipo_entrega === 'delivery'
+                      ? 'bg-rose-100 border-2 border-rose-500'
+                      : 'bg-gray-50 hover:bg-gray-100 border-2 border-transparent'
+                  }`}
+                >
+                  <Truck className="w-6 h-6 mx-auto mb-2 text-gray-600" />
+                  <p className="font-medium">Delivery</p>
+                </button>
+              </div>
+
+              {pedido.tipo_entrega === 'delivery' && (
+                <>
+                  <div>
+                    <Label>Endereço de Entrega</Label>
+                    <Input
+                      value={pedido.endereco_entrega}
+                      onChange={(e) => setPedido({ ...pedido, endereco_entrega: e.target.value })}
+                      placeholder="Rua, número, bairro..."
+                      className="mt-1"
+                    />
+                  </div>
+                  <div>
+                    <Label>Taxa de Entrega</Label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={pedido.valor_delivery}
+                      onChange={(e) => setPedido({ ...pedido, valor_delivery: parseFloat(e.target.value) || 0 })}
+                      className="mt-1"
+                    />
+                  </div>
+                </>
+              )}
+
+              <div>
+                <Label>Data de Entrega *</Label>
+                <Input
+                  type="date"
+                  value={pedido.data_entrega}
+                  onChange={(e) => setPedido({ ...pedido, data_entrega: e.target.value })}
+                  min={format(new Date(), 'yyyy-MM-dd')}
+                  className="mt-1"
+                />
+              </div>
+
+              <div>
+                <Label>Horário de Entrega</Label>
+                <Input
+                  type="time"
+                  value={pedido.horario_entrega}
+                  onChange={(e) => setPedido({ ...pedido, horario_entrega: e.target.value })}
+                  className="mt-1"
+                />
+              </div>
+
+              <div>
+                <Label>Observações</Label>
+                <Textarea
+                  value={pedido.observacoes}
+                  onChange={(e) => setPedido({ ...pedido, observacoes: e.target.value })}
+                  placeholder="Observações adicionais..."
+                  className="mt-1 min-h-[80px]"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* === PRODUTO PRONTO: Step 4 - Pagamento === */}
+          {tipoPedido === 'produto_pronto' && currentStep === 4 && (
+            <div className="space-y-4">
+              <Label>Forma de Pagamento *</Label>
+              <RadioGroup
+                value={pedido.forma_pagamento_nome || pedido.forma_pagamento}
+                onValueChange={(value) => {
+                  const forma = paymentOptions.find((item) => item.nome === value);
+                  if (!forma) return;
+                  setPedido({
+                    ...pedido,
+                    forma_pagamento: forma.nome,
+                    forma_pagamento_id: forma.id || '',
+                    forma_pagamento_nome: forma.nome,
+                    parcelas: forma.a_vista ? 1 : Math.min(pedido.parcelas || 1, forma.parcelamento_max),
+                  });
+                }}
+                className="grid gap-3"
+              >
+                {paymentOptions.map((forma) => (
+                  <label
+                    key={`${forma.id || 'fallback'}-${forma.nome}`}
+                    className={`flex items-start gap-3 p-4 rounded-xl cursor-pointer transition-colors ${
+                      (pedido.forma_pagamento_nome || pedido.forma_pagamento) === forma.nome
+                        ? 'bg-rose-100 border-2 border-rose-500'
+                        : 'bg-gray-50 hover:bg-gray-100 border-2 border-transparent'
+                    }`}
+                  >
+                    <RadioGroupItem value={forma.nome} className="mt-1" />
+                    <div>
+                      <p className="font-medium text-gray-900">{forma.nome}</p>
+                      {forma.descricao && (
+                        <p className="text-sm text-gray-500 mt-1">{forma.descricao}</p>
+                      )}
+                    </div>
+                  </label>
+                ))}
+              </RadioGroup>
+
+              {shouldShowInstallments && (
+                <div>
+                  <Label>Parcelas</Label>
+                  <RadioGroup
+                    value={String(pedido.parcelas || 1)}
+                    onValueChange={(value) => setPedido({ ...pedido, parcelas: Number(value) || 1 })}
+                    className="grid grid-cols-2 gap-2 mt-2 sm:grid-cols-3"
+                  >
+                    {Array.from({ length: selectedPayment.parcelamento_max }, (_, index) => index + 1).map((parcela) => (
+                      <label
+                        key={parcela}
+                        className={`flex items-center gap-3 rounded-xl border p-3 cursor-pointer transition-colors ${
+                          Number(pedido.parcelas || 1) === parcela
+                            ? 'bg-rose-100 border-rose-500'
+                            : 'bg-gray-50 hover:bg-gray-100 border-transparent'
+                        }`}
+                      >
+                        <RadioGroupItem value={String(parcela)} />
+                        <span className="font-medium text-gray-900">{parcela}x</span>
+                      </label>
+                    ))}
+                  </RadioGroup>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* === PRODUTO PRONTO: Step 5 - Resumo === */}
+          {tipoPedido === 'produto_pronto' && currentStep === 5 && (
+            <div className="space-y-6">
+              <div className="grid gap-4">
+                <div className="p-4 bg-gray-50 rounded-xl">
+                  <p className="text-sm text-gray-500">Cliente</p>
+                  <p className="font-semibold text-gray-900">{pedido.cliente_nome}</p>
+                  <p className="text-sm text-gray-600">{pedido.cliente_telefone}</p>
+                </div>
+
+                <div className="p-4 bg-gray-50 rounded-xl">
+                  <p className="text-sm text-gray-500">Produtos</p>
+                  <div className="mt-2 space-y-1">
+                    {carrinho.map((item) => (
+                      <div key={item.id} className="flex justify-between text-sm">
+                        <span>{item.nome} x{item.quantidade}</span>
+                        <span className="font-medium">R$ {(item.preco * item.quantidade).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="p-4 bg-gray-50 rounded-xl">
+                  <p className="text-sm text-gray-500">Entrega</p>
+                  <p className="font-semibold text-gray-900">
+                    {pedido.tipo_entrega === 'delivery' ? 'Delivery' : 'Retirada'}
+                    {pedido.data_entrega && ` — ${format(parseISO(pedido.data_entrega), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}`}
+                    {pedido.horario_entrega && ` às ${pedido.horario_entrega}`}
+                  </p>
+                  {pedido.endereco_entrega && (
+                    <p className="text-sm text-gray-600 mt-1">{pedido.endereco_entrega}</p>
+                  )}
+                </div>
+
+                <div className="p-4 bg-gray-50 rounded-xl">
+                  <p className="text-sm text-gray-500">Pagamento</p>
+                  <p className="font-semibold text-gray-900">
+                    {pedido.forma_pagamento_nome || pedido.forma_pagamento || 'Não informado'}
+                    {Number(pedido.parcelas) > 1 ? ` em ${pedido.parcelas}x` : ''}
+                  </p>
+                </div>
+
+                {pedido.observacoes && (
+                  <div className="p-4 bg-amber-50 rounded-xl border border-amber-100">
+                    <p className="text-sm text-gray-500">Observações</p>
+                    <p className="text-gray-700">{pedido.observacoes}</p>
+                  </div>
+                )}
+              </div>
+
+              <div className="p-4 bg-rose-50 rounded-xl space-y-2">
+                {carrinho.map((item) => (
+                  <div key={item.id} className="flex justify-between text-sm">
+                    <span>{item.nome} x{item.quantidade}</span>
+                    <span>R$ {(item.preco * item.quantidade).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                ))}
+                {pedido.valor_delivery > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span>Taxa de entrega</span>
+                    <span>+ R$ {pedido.valor_delivery.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                )}
+                <div className="pt-2 border-t border-rose-200 flex justify-between font-bold text-lg">
+                  <span>Total</span>
+                  <span className="text-rose-600">
+                    R$ {totalProdutos.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* === PERSONALIZADO: Step 7 - Entrega === */}
+          {tipoPedido === 'personalizado' && currentStep === 7 && (
             <div className="space-y-4">
               <div>
                 <Label>Data de Entrega *</Label>
@@ -712,8 +1242,74 @@ export default function NovoPedido() {
             </div>
           )}
 
-          {/* Step 8: Resumo */}
-          {currentStep === 8 && (
+          {/* === PERSONALIZADO: Step 8 - Pagamento === */}
+          {tipoPedido === 'personalizado' && currentStep === 8 && (
+            <div className="space-y-4">
+              <Label>Forma de Pagamento *</Label>
+              <RadioGroup
+                value={pedido.forma_pagamento_nome || pedido.forma_pagamento}
+                onValueChange={(value) => {
+                  const forma = paymentOptions.find((item) => item.nome === value);
+                  if (!forma) return;
+                  setPedido({
+                    ...pedido,
+                    forma_pagamento: forma.nome,
+                    forma_pagamento_id: forma.id || '',
+                    forma_pagamento_nome: forma.nome,
+                    parcelas: forma.a_vista ? 1 : Math.min(pedido.parcelas || 1, forma.parcelamento_max),
+                  });
+                }}
+                className="grid gap-3"
+              >
+                {paymentOptions.map((forma) => (
+                  <label
+                    key={`${forma.id || 'fallback'}-${forma.nome}`}
+                    className={`flex items-start gap-3 p-4 rounded-xl cursor-pointer transition-colors ${
+                      (pedido.forma_pagamento_nome || pedido.forma_pagamento) === forma.nome
+                        ? 'bg-rose-100 border-2 border-rose-500'
+                        : 'bg-gray-50 hover:bg-gray-100 border-2 border-transparent'
+                    }`}
+                  >
+                    <RadioGroupItem value={forma.nome} className="mt-1" />
+                    <div>
+                      <p className="font-medium text-gray-900">{forma.nome}</p>
+                      {forma.descricao && (
+                        <p className="text-sm text-gray-500 mt-1">{forma.descricao}</p>
+                      )}
+                    </div>
+                  </label>
+                ))}
+              </RadioGroup>
+
+              {shouldShowInstallments && (
+                <div>
+                  <Label>Parcelas</Label>
+                  <RadioGroup
+                    value={String(pedido.parcelas || 1)}
+                    onValueChange={(value) => setPedido({ ...pedido, parcelas: Number(value) || 1 })}
+                    className="grid grid-cols-2 gap-2 mt-2 sm:grid-cols-3"
+                  >
+                    {Array.from({ length: selectedPayment.parcelamento_max }, (_, index) => index + 1).map((parcela) => (
+                      <label
+                        key={parcela}
+                        className={`flex items-center gap-3 rounded-xl border p-3 cursor-pointer transition-colors ${
+                          Number(pedido.parcelas || 1) === parcela
+                            ? 'bg-rose-100 border-rose-500'
+                            : 'bg-gray-50 hover:bg-gray-100 border-transparent'
+                        }`}
+                      >
+                        <RadioGroupItem value={String(parcela)} />
+                        <span className="font-medium text-gray-900">{parcela}x</span>
+                      </label>
+                    ))}
+                  </RadioGroup>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* === PERSONALIZADO: Step 9 - Resumo === */}
+          {tipoPedido === 'personalizado' && currentStep === 9 && (
             <div className="space-y-6">
               <div className="grid gap-4">
                 <div className="p-4 bg-gray-50 rounded-xl">
@@ -755,6 +1351,17 @@ export default function NovoPedido() {
                     {pedido.data_entrega && format(parseISO(pedido.data_entrega), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
                     {pedido.horario_entrega && ` às ${pedido.horario_entrega}`}
                   </p>
+                </div>
+
+                <div className="p-4 bg-gray-50 rounded-xl">
+                  <p className="text-sm text-gray-500">Pagamento</p>
+                  <p className="font-semibold text-gray-900">
+                    {pedido.forma_pagamento_nome || pedido.forma_pagamento || 'Não informado'}
+                    {Number(pedido.parcelas) > 1 ? ` em ${pedido.parcelas}x` : ''}
+                  </p>
+                  {selectedPayment?.descricao && (
+                    <p className="text-sm text-gray-500 mt-1">{selectedPayment.descricao}</p>
+                  )}
                 </div>
 
                 {pedido.observacoes && (

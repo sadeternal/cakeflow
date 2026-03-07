@@ -42,6 +42,71 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 
+const isPixPaymentName = (name = '') => name.toLowerCase().includes('pix');
+
+const normalizeFormaPagamento = (forma = {}) => {
+  const pix = isPixPaymentName(forma.nome || '');
+  const aVista = forma.a_vista === true;
+  const parcelamentoMax = aVista ? 1 : Math.max(Number(forma.parcelamento_max) || 1, 1);
+
+  return {
+    ...forma,
+    descricao: aVista && pix && (!forma.descricao || forma.descricao === 'À vista')
+      ? 'À vista'
+      : (forma.descricao || ''),
+    a_vista: aVista,
+    parcelamento_max: parcelamentoMax,
+    chave_pix: forma.chave_pix || '',
+    ativo: forma.ativo !== false,
+  };
+};
+
+const defaultEtapasPedido = [
+  { key: 'tamanho', label: 'Tamanho', ativo: true },
+  { key: 'massa', label: 'Massa', ativo: true },
+  { key: 'recheios', label: 'Recheios', ativo: true },
+  { key: 'cobertura', label: 'Cobertura', ativo: true },
+  { key: 'extras', label: 'Extras', ativo: true },
+  { key: 'doces', label: 'Doces', ativo: true },
+  { key: 'salgados', label: 'Salgados', ativo: true },
+  { key: 'tipo_entrega', label: 'Tipo de Entrega', ativo: true },
+  { key: 'entrega', label: 'Entrega', ativo: true },
+  { key: 'dados', label: 'Seus Dados', ativo: true },
+  { key: 'pagamento', label: 'Pagamento', ativo: true },
+  { key: 'resumo', label: 'Resumo', ativo: true }
+];
+
+const normalizeEtapasPedido = (etapas) => {
+  const baseEtapas = Array.isArray(etapas) && etapas.length > 0
+    ? etapas.flatMap((etapa) =>
+      etapa.key === 'doces_salgados'
+        ? [
+          { key: 'doces', label: 'Doces', ativo: etapa.ativo !== false },
+          { key: 'salgados', label: 'Salgados', ativo: etapa.ativo !== false }
+        ]
+        : [{
+          ...etapa,
+          label: etapa.label || defaultEtapasPedido.find((item) => item.key === etapa.key)?.label || etapa.key
+        }]
+    )
+    : defaultEtapasPedido;
+
+  if (baseEtapas.some((etapa) => etapa.key === 'tipo_entrega')) {
+    return baseEtapas;
+  }
+
+  const etapaTipoEntrega = { key: 'tipo_entrega', label: 'Tipo de Entrega', ativo: true };
+  const entregaIndex = baseEtapas.findIndex((etapa) => etapa.key === 'entrega');
+
+  if (entregaIndex === -1) {
+    return [...baseEtapas, etapaTipoEntrega];
+  }
+
+  const novasEtapas = [...baseEtapas];
+  novasEtapas.splice(entregaIndex, 0, etapaTipoEntrega);
+  return novasEtapas;
+};
+
 export default function Configuracoes() {
   const { user } = useAuth();
   const { toast, dismiss } = useToast();
@@ -110,16 +175,7 @@ export default function Configuracoes() {
           limite_pedidos_personalizados_diarios: conf.limite_pedidos_personalizados_diarios ?? '',
           horario_funcionamento: conf.horario_funcionamento || { inicio: '', fim: '' },
           dias_funcionamento: conf.dias_funcionamento || [],
-          etapas_pedido: Array.isArray(conf.etapas_pedido) && conf.etapas_pedido.length > 0
-            ? conf.etapas_pedido.flatMap(e =>
-              e.key === 'doces_salgados'
-                ? [
-                  { key: 'doces', label: 'Doces', ativo: e.ativo !== false },
-                  { key: 'salgados', label: 'Salgados', ativo: e.ativo !== false }
-                ]
-                : [e]
-            )
-            : [],
+          etapas_pedido: normalizeEtapasPedido(conf.etapas_pedido),
         });
       }
       return conf;
@@ -156,9 +212,7 @@ export default function Configuracoes() {
     dias_funcionamento: Array.isArray(confeitariaForm.dias_funcionamento)
       ? confeitariaForm.dias_funcionamento
       : [],
-    etapas_pedido: Array.isArray(confeitariaForm.etapas_pedido)
-      ? confeitariaForm.etapas_pedido
-      : []
+    etapas_pedido: normalizeEtapasPedido(confeitariaForm.etapas_pedido)
   });
 
   const updateConfeitaria = useMutation({
@@ -268,9 +322,13 @@ export default function Configuracoes() {
     setEditingItem(item);
 
     if (item) {
-      setItemForm({ ...item });
+      setItemForm(type === 'FormaPagamento' ? normalizeFormaPagamento(item) : { ...item });
     } else {
-      setItemForm({ nome: '', ativo: true });
+      setItemForm(
+        type === 'FormaPagamento'
+          ? normalizeFormaPagamento({ nome: '', descricao: '', a_vista: false, parcelamento_max: 1, chave_pix: '', ativo: true })
+          : { nome: '', ativo: true }
+      );
     }
     setShowItemForm(true);
   };
@@ -307,14 +365,90 @@ export default function Configuracoes() {
   };
 
   const renderItemFormFields = () => {
+    const isPix = itemType === 'FormaPagamento' && isPixPaymentName(itemForm.nome || '');
+
     return (
-      <div>
-        <Label>Nome *</Label>
-        <Input
-          value={itemForm.nome || ''}
-          onChange={(e) => setItemForm({ ...itemForm, nome: e.target.value })}
-          placeholder="Ex: PIX, Dinheiro, Cartão de Crédito"
-        />
+      <div className="space-y-4">
+        <div>
+          <Label>Nome *</Label>
+          <Input
+            value={itemForm.nome || ''}
+            onChange={(e) => {
+              const nome = e.target.value;
+              setItemForm(normalizeFormaPagamento({
+                ...itemForm,
+                nome,
+              }));
+            }}
+            placeholder="Ex: PIX, Dinheiro, Cartão de Crédito"
+          />
+        </div>
+
+        {itemType === 'FormaPagamento' && (
+          <>
+            <div className="flex items-start justify-between rounded-xl border p-4">
+              <div>
+                <Label className="text-base">Pagamento à vista</Label>
+                <p className="text-sm text-gray-500 mt-1">
+                  Quando ativado, não exibe parcelamento e salva sempre 1x.
+                </p>
+              </div>
+              <Switch
+                checked={itemForm.a_vista === true}
+                onCheckedChange={(checked) =>
+                  setItemForm(normalizeFormaPagamento({
+                    ...itemForm,
+                    a_vista: checked,
+                    parcelamento_max: checked ? 1 : itemForm.parcelamento_max,
+                    descricao: checked && isPix ? 'À vista' : (!checked && isPix && itemForm.descricao === 'À vista' ? '' : itemForm.descricao),
+                  }))
+                }
+              />
+            </div>
+
+            {!normalizeFormaPagamento(itemForm).a_vista && (
+              <div>
+                <Label>Quantidade máxima de parcelas *</Label>
+                <Input
+                  type="number"
+                  min="1"
+                  value={itemForm.parcelamento_max || 1}
+                  onChange={(e) =>
+                    setItemForm(normalizeFormaPagamento({
+                      ...itemForm,
+                      parcelamento_max: Math.max(Number(e.target.value) || 1, 1)
+                    }))
+                  }
+                />
+              </div>
+            )}
+
+            <div>
+              <Label>Observação</Label>
+              {isPix && normalizeFormaPagamento(itemForm).a_vista ? (
+                <Input value="À vista" disabled />
+              ) : (
+                <Textarea
+                  value={itemForm.descricao || ''}
+                  onChange={(e) => setItemForm({ ...itemForm, descricao: e.target.value })}
+                  placeholder="Ex: Taxas, instruções ou condições de pagamento"
+                  className="min-h-[80px]"
+                />
+              )}
+            </div>
+
+            {isPix && (
+              <div>
+                <Label>Chave Pix</Label>
+                <Input
+                  value={itemForm.chave_pix || ''}
+                  onChange={(e) => setItemForm({ ...itemForm, chave_pix: e.target.value })}
+                  placeholder="CPF, e-mail, telefone ou chave aleatória"
+                />
+              </div>
+            )}
+          </>
+        )}
       </div>
     );
   };
@@ -327,6 +461,14 @@ export default function Configuracoes() {
         </div>
         <div>
           <p className="font-medium text-gray-900">{item.nome}</p>
+          <div className="flex flex-wrap items-center gap-2 mt-1">
+            <span className="text-xs font-medium text-gray-500">
+              {normalizeFormaPagamento(item).a_vista ? 'À vista' : `Até ${normalizeFormaPagamento(item).parcelamento_max}x`}
+            </span>
+            {normalizeFormaPagamento(item).descricao && (
+              <span className="text-xs text-gray-400">{normalizeFormaPagamento(item).descricao}</span>
+            )}
+          </div>
         </div>
       </div>
       <div className="flex items-center gap-2">
@@ -914,10 +1056,15 @@ export default function Configuracoes() {
             <Button
               onClick={() => saveItem.mutate({
                 type: itemType,
-                data: itemForm,
+                data: itemType === 'FormaPagamento' ? normalizeFormaPagamento(itemForm) : itemForm,
                 id: editingItem?.id,
               })}
-              disabled={!itemForm.nome || ((itemType === 'doce' || itemType === 'salgado') && !itemForm.valor_unitario) || saveItem.isPending}
+              disabled={
+                !itemForm.nome ||
+                (itemType === 'FormaPagamento' && !normalizeFormaPagamento(itemForm).a_vista && !(Number(itemForm.parcelamento_max) >= 1)) ||
+                ((itemType === 'doce' || itemType === 'salgado') && !itemForm.valor_unitario) ||
+                saveItem.isPending
+              }
               className="bg-rose-500 hover:bg-rose-600"
             >
               {saveItem.isPending ? 'Salvando...' : 'Salvar'}

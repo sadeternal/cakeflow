@@ -18,6 +18,7 @@ import { Lock, Mail } from 'lucide-react';
 import { createPageUrl } from '@/utils';
 import googleIcon from '@/assets/google.svg';
 import CakeflowLogoIcon from '@/components/CakeflowLogoIcon';
+import { syncClientToBrevo } from '@/lib/brevoClientSync';
 
 const readRedirect = (search) => {
   const value = new URLSearchParams(search).get('redirect');
@@ -58,6 +59,8 @@ export default function AuthPage() {
 
   const redirectTo = useMemo(() => readRedirect(location.search), [location.search]);
   const forceAuth = useMemo(() => new URLSearchParams(location.search).get('force') === '1', [location.search]);
+  const supabaseConfigStatus = useMemo(() => appClient.config.getStatus(), []);
+  const isSupabaseConfigured = supabaseConfigStatus.isConfigured;
 
   useEffect(() => {
     setMode('login');
@@ -82,6 +85,10 @@ export default function AuthPage() {
   }, [location.pathname, location.search, toast]);
 
   const getAuthErrorMessage = (error) => {
+    if (error?.code === 'supabase_config_missing') {
+      return error.message;
+    }
+
     const code = error?.payload?.error_code || error?.payload?.details?.error_code;
     if (code === 'user_already_exists') {
       return 'Este e-mail já está cadastrado. Use a tela de login.';
@@ -96,6 +103,19 @@ export default function AuthPage() {
       return 'Senha fraca. Use pelo menos 8 caracteres com letras e números.';
     }
     return error?.message || 'Não foi possível concluir a operação.';
+  };
+
+  const syncSignupToBrevo = async () => {
+    const email = signupData.email.trim().toLowerCase();
+    return syncClientToBrevo(
+      {
+        nome: email,
+        email,
+        telefone: '',
+        confeitaria_id: ''
+      },
+      { isPublic: true }
+    );
   };
 
   if (isAuthenticated && !forceAuth) {
@@ -141,6 +161,7 @@ export default function AuthPage() {
       });
 
       if (!payload?.access_token) {
+        await syncSignupToBrevo();
         toast({
           title: 'Cadastro criado',
           description: 'Verifique seu e-mail para confirmar a conta e depois faça login.'
@@ -149,6 +170,7 @@ export default function AuthPage() {
         return;
       }
 
+      await syncSignupToBrevo();
       toast({
         title: 'Conta criada',
         description: 'Cadastro concluído. Vamos configurar sua confeitaria.'
@@ -230,6 +252,21 @@ export default function AuthPage() {
               </Button>
             )}
 
+            {!isSupabaseConfigured && (
+              <div className="mb-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+                <p className="font-semibold">Supabase não configurado</p>
+                <p className="mt-1">
+                  O sistema local abriu, mas não consegue autenticar porque o `.env.local` ainda está sem as credenciais reais.
+                </p>
+                <p className="mt-2">Ajuste necessário:</p>
+                <ul className="mt-2 list-disc space-y-1 pl-5">
+                  {supabaseConfigStatus.issues.map((issue) => (
+                    <li key={issue}>{issue}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
             {mode === 'cadastro' ? (
               <form onSubmit={handleSignup} className="space-y-3.5">
                 <div className="space-y-1.5">
@@ -294,7 +331,7 @@ export default function AuthPage() {
                 </div>
 
                 <Button
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || !isSupabaseConfigured}
                   type="submit"
                   className="mt-3 h-11 w-full rounded-xl bg-[#ef2b63] text-[15px] font-semibold text-white hover:bg-[#dc2458]"
                 >
@@ -355,7 +392,7 @@ export default function AuthPage() {
                 </div>
 
                 <Button
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || !isSupabaseConfigured}
                   type="submit"
                   className="mt-1 h-11 w-full rounded-xl bg-[#ef2b63] text-[15px] font-semibold text-white hover:bg-[#dc2458]"
                 >
@@ -368,6 +405,7 @@ export default function AuthPage() {
               type="button"
               variant="outline"
               className="mt-3.5 h-11 w-full rounded-xl border-[#d6d8dd] bg-white text-[15px] font-semibold text-[#3c3d42] hover:bg-slate-50"
+              disabled={!isSupabaseConfigured}
               onClick={handleGoogleLogin}
             >
               <img src={googleIcon} alt="" className="mr-2 h-4 w-4" aria-hidden="true" />
@@ -417,11 +455,11 @@ export default function AuthPage() {
                 />
               </div>
             </div>
-            <Button
-              type="submit"
-              disabled={isSendingReset}
-              className="h-11 w-full rounded-xl bg-[#ef2b63] text-[15px] font-semibold text-white hover:bg-[#dc2458]"
-            >
+                <Button
+                  type="submit"
+                  disabled={isSendingReset || !isSupabaseConfigured}
+                  className="h-11 w-full rounded-xl bg-[#ef2b63] text-[15px] font-semibold text-white hover:bg-[#dc2458]"
+                >
               {isSendingReset ? 'Enviando...' : 'Enviar link de recuperação'}
             </Button>
           </form>

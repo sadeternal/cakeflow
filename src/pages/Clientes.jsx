@@ -13,7 +13,8 @@ import {
   MessageCircle,
   Pencil,
   Trash2,
-  ShoppingBag
+  ShoppingBag,
+  Cake
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -23,6 +24,7 @@ import { CPFInput, TelefoneInput } from '@/components/ui/masked-input';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/components/ui/use-toast';
+import { syncClientToBrevo } from '@/lib/brevoClientSync';
 import {
   Dialog,
   DialogContent,
@@ -90,15 +92,39 @@ export default function Clientes() {
         observacoes: data.observacoes || '',
       };
 
+      const persistAndSync = async (clientePromise, syncPayload) => {
+        const cliente = await clientePromise;
+        const brevoResult = await syncClientToBrevo(syncPayload(cliente));
+        return { cliente, brevoSynced: brevoResult.success };
+      };
+
       try {
         if (editingCliente) {
-          return await appClient.entities.Cliente.update(editingCliente.id, payload);
+          return persistAndSync(
+            appClient.entities.Cliente.update(editingCliente.id, payload),
+            (cliente) => ({
+              cliente_id: cliente.id,
+              confeitaria_id: user.confeitaria_id,
+              nome: cliente.nome,
+              telefone: cliente.telefone,
+              email: cliente.email
+            })
+          );
         }
 
-        return await appClient.entities.Cliente.create({
-          ...payload,
-          confeitaria_id: user.confeitaria_id,
-        });
+        return persistAndSync(
+          appClient.entities.Cliente.create({
+            ...payload,
+            confeitaria_id: user.confeitaria_id,
+          }),
+          (cliente) => ({
+            cliente_id: cliente.id,
+            confeitaria_id: user.confeitaria_id,
+            nome: cliente.nome,
+            telefone: cliente.telefone,
+            email: cliente.email
+          })
+        );
       } catch (error) {
         const message = String(error?.message || '').toLowerCase();
         const shouldRetryWithProfileSync =
@@ -112,23 +138,44 @@ export default function Clientes() {
           await appClient.auth.updateMe({ confeitaria_id: user.confeitaria_id });
 
           if (editingCliente) {
-            return appClient.entities.Cliente.update(editingCliente.id, payload);
+            return persistAndSync(
+              appClient.entities.Cliente.update(editingCliente.id, payload),
+              (cliente) => ({
+                cliente_id: cliente.id,
+                confeitaria_id: user.confeitaria_id,
+                nome: cliente.nome,
+                telefone: cliente.telefone,
+                email: cliente.email
+              })
+            );
           }
 
-          return appClient.entities.Cliente.create({
-            ...payload,
-            confeitaria_id: user.confeitaria_id,
-          });
+          return persistAndSync(
+            appClient.entities.Cliente.create({
+              ...payload,
+              confeitaria_id: user.confeitaria_id,
+            }),
+            (cliente) => ({
+              cliente_id: cliente.id,
+              confeitaria_id: user.confeitaria_id,
+              nome: cliente.nome,
+              telefone: cliente.telefone,
+              email: cliente.email
+            })
+          );
         }
 
         throw error;
       }
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['clientes', user?.confeitaria_id] });
       toast({
         title: editingCliente ? 'Cliente atualizado' : 'Cliente criado',
-        description: 'Dados do cliente salvos com sucesso.',
+        description:
+          result?.brevoSynced === false
+            ? 'Dados salvos, mas o contato não foi sincronizado com o Brevo.'
+            : 'Dados do cliente salvos com sucesso.',
         duration: 2500
       });
       closeForm();
@@ -194,6 +241,10 @@ export default function Clientes() {
   const handleWhatsApp = (telefone) => {
     const phone = telefone?.replace(/\D/g, '');
     window.open(`https://wa.me/55${phone}`, '_blank');
+  };
+
+  const handleNovoPedido = (cliente) => {
+    window.location.href = `${createPageUrl('NovoPedido')}?clienteId=${cliente.id}`;
   };
 
   if (!user) return null;
@@ -300,6 +351,15 @@ export default function Clientes() {
                   )}
 
                   <div className="mt-4 flex gap-2" onClick={(e) => e.stopPropagation()}>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="flex-1 border-rose-200 text-rose-600 hover:bg-rose-50"
+                      onClick={() => handleNovoPedido(cliente)}
+                    >
+                      <Cake className="w-4 h-4 mr-1" />
+                      Novo Pedido
+                    </Button>
                     {cliente.telefone && (
                       <Button
                         size="sm"
@@ -501,6 +561,15 @@ export default function Clientes() {
                   </div>
                 )}
               </div>
+
+              <Button
+                variant="outline"
+                className="w-full border-rose-200 text-rose-600 hover:bg-rose-50"
+                onClick={() => handleNovoPedido(selectedCliente)}
+              >
+                <Cake className="w-4 h-4 mr-2" />
+                Novo Pedido
+              </Button>
 
               {selectedCliente.observacoes && (
                 <div className="p-4 bg-amber-50 rounded-xl border border-amber-100">

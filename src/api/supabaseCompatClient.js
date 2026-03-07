@@ -3,7 +3,60 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 const storageBucket = import.meta.env.VITE_SUPABASE_STORAGE_BUCKET || 'public';
 const supabaseAuthRedirectUrl = import.meta.env.VITE_SUPABASE_AUTH_REDIRECT_URL;
 
-if (!supabaseUrl || !supabaseAnonKey) {
+const SUPABASE_PLACEHOLDER_VALUES = new Set(['...', 'SEU-PROJETO', 'SUA_ANON_KEY', 'SEU_PROJECT_REF']);
+
+const hasPlaceholder = (value = '') => {
+  const normalized = String(value || '').trim();
+  if (!normalized) return false;
+  if (SUPABASE_PLACEHOLDER_VALUES.has(normalized)) return true;
+  return normalized.includes('SEU-PROJETO') || normalized.includes('SUA_ANON_KEY') || normalized === '...';
+};
+
+const getSupabaseConfigStatus = () => {
+  const issues = [];
+  const normalizedUrl = String(supabaseUrl || '').trim();
+  const normalizedAnonKey = String(supabaseAnonKey || '').trim();
+
+  if (!normalizedUrl || hasPlaceholder(normalizedUrl)) {
+    issues.push('Defina `VITE_SUPABASE_URL` com a URL real do projeto Supabase.');
+  } else {
+    try {
+      const parsedUrl = new URL(normalizedUrl);
+      if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+        issues.push('`VITE_SUPABASE_URL` precisa começar com `http://` ou `https://`.');
+      }
+    } catch {
+      issues.push('`VITE_SUPABASE_URL` não é uma URL válida.');
+    }
+  }
+
+  if (!normalizedAnonKey || hasPlaceholder(normalizedAnonKey)) {
+    issues.push('Defina `VITE_SUPABASE_ANON_KEY` com a anon key real do projeto.');
+  }
+
+  return {
+    isConfigured: issues.length === 0,
+    issues
+  };
+};
+
+const getSupabaseConfigError = () => {
+  const status = getSupabaseConfigStatus();
+  if (status.isConfigured) return null;
+
+  const err = new Error(`Supabase não configurado no ambiente local. ${status.issues.join(' ')}`);
+  err.code = 'supabase_config_missing';
+  err.status = 503;
+  err.details = status;
+  return err;
+};
+
+const assertSupabaseConfigured = () => {
+  const error = getSupabaseConfigError();
+  if (error) throw error;
+};
+
+if (!getSupabaseConfigStatus().isConfigured) {
   console.warn('[supabase] VITE_SUPABASE_URL ou VITE_SUPABASE_ANON_KEY não configuradas.');
 }
 
@@ -102,6 +155,10 @@ const ENTITY_TABLE_MAP = {
   Salgado: 'salgados',
   AcessoCatalogo: 'acessos_catalogo',
   DiaBloqueado: 'dias_bloqueados',
+  SystemNotification: 'system_notifications',
+  SystemNotificationRead: 'system_notification_reads',
+  PedidoNotificationRead: 'pedido_notification_reads',
+  ParcelamentoPedido: 'parcelamento_pedidos',
   User: 'profiles'
 };
 
@@ -382,6 +439,7 @@ const ensureValidAccessToken = async () => {
 };
 
 const validateAccessTokenWithAuthApi = async (token) => {
+  assertSupabaseConfigured();
   const response = await fetch(`${supabaseUrl}/auth/v1/user`, {
     method: 'GET',
     headers: {
@@ -406,6 +464,7 @@ const validateAccessTokenWithAuthApi = async (token) => {
 };
 
 const buildAuthHeaders = async (extra = {}) => {
+  assertSupabaseConfigured();
   const token = await ensureValidAccessToken();
   const headers = {
     apikey: supabaseAnonKey || '',
@@ -420,6 +479,7 @@ const buildAuthHeaders = async (extra = {}) => {
 };
 
 const requestRest = async ({ table, method = 'GET', query = '', body = null, prefer = null, asAnon = false }) => {
+  assertSupabaseConfigured();
   const url = `${supabaseUrl}/rest/v1/${table}${query}`;
   const headers = await buildAuthHeaders({
     'Content-Type': 'application/json'
@@ -454,6 +514,7 @@ const requestRest = async ({ table, method = 'GET', query = '', body = null, pre
 };
 
 const requestFunction = async (name, payload) => {
+  assertSupabaseConfigured();
   const getFunctionHeaders = async () => {
     let token = await ensureValidAccessToken();
     if (!token) {
@@ -510,6 +571,7 @@ const requestFunction = async (name, payload) => {
 };
 
 const requestPublicFunction = async (name, payload) => {
+  assertSupabaseConfigured();
   const response = await fetch(`${supabaseUrl}/functions/v1/${name}`, {
     method: 'POST',
     headers: {
@@ -524,6 +586,7 @@ const requestPublicFunction = async (name, payload) => {
 };
 
 const requestRpc = async (name, payload, options = {}) => {
+  assertSupabaseConfigured();
   const asAnon = options?.asAnon === true;
   const headers = asAnon
     ? {
@@ -542,6 +605,12 @@ const requestRpc = async (name, payload, options = {}) => {
 
   await ensureOk(response);
   return safeJson(response);
+};
+
+const getRealtimeWebsocketUrl = () => {
+  const parsed = new URL(supabaseUrl);
+  const protocol = parsed.protocol === 'https:' ? 'wss:' : 'ws:';
+  return `${protocol}//${parsed.host}/realtime/v1/websocket?apikey=${encodeURIComponent(supabaseAnonKey || '')}&vsn=1.0.0`;
 };
 
 const buildFilterQuery = (filters = {}) => {
@@ -727,6 +796,106 @@ const entityApi = (entityName) => {
   };
 };
 
+const realtimeApi = {
+  async subscribeToPostgresChanges({ channel, changes = [], onChange, onError }) {
+    assertSupabaseConfigured();
+
+    if (typeof window === 'undefined' || typeof WebSocket === 'undefined') {
+      return () => {};
+    }
+
+    if (!Array.isArray(changes) || changes.length === 0) {
+      throw new Error('Informe ao menos uma tabela para assinar no realtime.');
+    }
+
+    const token = await ensureValidAccessToken();
+    if (!token) {
+      throw new Error('Sessão expirada. Faça login novamente.');
+    }
+
+    const topic = `realtime:${channel || `channel-${Date.now()}`}`;
+    const socket = new WebSocket(getRealtimeWebsocketUrl());
+    let heartbeatTimer = null;
+    let ref = 1;
+
+    const nextRef = () => String(ref++);
+
+    const send = (event, payload = {}, targetTopic = topic) => {
+      if (socket.readyState !== WebSocket.OPEN) return;
+      socket.send(JSON.stringify({
+        topic: targetTopic,
+        event,
+        payload,
+        ref: nextRef()
+      }));
+    };
+
+    const cleanup = () => {
+      if (heartbeatTimer) {
+        clearInterval(heartbeatTimer);
+        heartbeatTimer = null;
+      }
+    };
+
+    socket.addEventListener('open', () => {
+      send('phx_join', {
+        config: {
+          broadcast: { ack: false, self: false },
+          presence: { key: '' },
+          postgres_changes: changes.map((change) => ({
+            event: change.event || '*',
+            schema: change.schema || 'public',
+            table: change.table,
+            filter: change.filter
+          }))
+        },
+        access_token: token
+      });
+
+      heartbeatTimer = window.setInterval(() => {
+        if (socket.readyState === WebSocket.OPEN) {
+          socket.send(JSON.stringify({
+            topic: 'phoenix',
+            event: 'heartbeat',
+            payload: {},
+            ref: nextRef()
+          }));
+        }
+      }, 25000);
+    });
+
+    socket.addEventListener('message', (event) => {
+      try {
+        const payload = JSON.parse(event.data);
+        if (payload?.event === 'postgres_changes') {
+          onChange?.(payload.payload, payload);
+          return;
+        }
+
+        if (payload?.event === 'phx_error') {
+          onError?.(new Error('Falha na assinatura realtime do Supabase.'));
+        }
+      } catch (error) {
+        onError?.(error);
+      }
+    });
+
+    socket.addEventListener('error', () => {
+      onError?.(new Error('Erro de conexão com o realtime do Supabase.'));
+    });
+
+    socket.addEventListener('close', cleanup);
+
+    return () => {
+      cleanup();
+      if (socket.readyState === WebSocket.OPEN) {
+        send('phx_leave', {});
+      }
+      socket.close();
+    };
+  }
+};
+
 const entitiesProxy = new Proxy(
   {},
   {
@@ -742,6 +911,7 @@ const authApi = {
   },
 
   async signInWithPassword({ email, password }) {
+    assertSupabaseConfigured();
     const response = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=password`, {
       method: 'POST',
       headers: {
@@ -758,6 +928,7 @@ const authApi = {
   },
 
   async signUpWithPassword({ email, password, fullName }) {
+    assertSupabaseConfigured();
     try {
       const response = await fetch(`${supabaseUrl}/auth/v1/signup`, {
         method: 'POST',
@@ -793,6 +964,7 @@ const authApi = {
   },
 
   async me() {
+    assertSupabaseConfigured();
     let accessToken = await ensureValidAccessToken();
     if (!accessToken) throw new Error('Unauthorized');
 
@@ -900,6 +1072,7 @@ const authApi = {
   },
 
   async updateAccount(payload = {}) {
+    assertSupabaseConfigured();
     const nextEmail = typeof payload.email === 'string' ? payload.email.trim() : '';
     const nextPassword = typeof payload.password === 'string' ? payload.password : '';
     const updatePayload = {};
@@ -929,6 +1102,7 @@ const authApi = {
   },
 
   async resetPassword(email) {
+    assertSupabaseConfigured();
     const redirectTo = `${window.location.origin}/auth?mode=login`;
     const response = await fetch(`${supabaseUrl}/auth/v1/recover`, {
       method: 'POST',
@@ -942,6 +1116,7 @@ const authApi = {
   },
 
   async logout(redirectTo) {
+    assertSupabaseConfigured();
     try {
       await fetch(`${supabaseUrl}/auth/v1/logout`, {
         method: 'POST',
@@ -956,6 +1131,7 @@ const authApi = {
   },
 
   signInWithGoogle(returnTo) {
+    assertSupabaseConfigured();
     const redirect = toAbsoluteInternalUrl(returnTo);
     const callbackUrl = new URL(getSafeAuthCallbackUrl());
     callbackUrl.searchParams.set('redirect', redirect);
@@ -1008,6 +1184,11 @@ const authApi = {
 const functionsApi = {
   async invoke(name, payload) {
     const data = await requestFunction(name, payload);
+    return { data };
+  },
+
+  async invokePublic(name, payload) {
+    const data = await requestPublicFunction(name, payload);
     return { data };
   },
 
@@ -1098,9 +1279,14 @@ const appLogsApi = {
 export const createSupabaseCompatClient = () => ({
   auth: authApi,
   entities: entitiesProxy,
+  realtime: realtimeApi,
   functions: functionsApi,
   integrations: integrationsApi,
   appLogs: appLogsApi,
+  config: {
+    getStatus: getSupabaseConfigStatus,
+    getError: getSupabaseConfigError
+  },
   asServiceRole: {
     entities: entitiesProxy,
     integrations: integrationsApi
