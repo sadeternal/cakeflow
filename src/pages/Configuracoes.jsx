@@ -283,17 +283,28 @@ export default function Configuracoes() {
   const saveItem = useMutation({
     mutationFn: async ({ type, data, id }) => {
       const entity = getEntityForType(type);
+      // Strip read-only/internal fields before sending
+      const { id: _id, confeitaria_id: _cid, created_date, updated_date, ...cleanData } = data;
       if (id) {
-        return entity.update(id, data);
+        return entity.update(id, cleanData);
       }
       return entity.create({
-        ...data,
+        ...cleanData,
         confeitaria_id: user.confeitaria_id,
       });
     },
     onSuccess: () => {
       invalidateEntityQueries(itemType);
       closeItemForm();
+      toast({ title: 'Salvo com sucesso!' });
+    },
+    onError: (error) => {
+      console.error('Erro ao salvar:', error);
+      toast({
+        title: 'Erro ao salvar',
+        description: error?.message || 'Tente novamente.',
+        variant: 'destructive',
+      });
     },
   });
 
