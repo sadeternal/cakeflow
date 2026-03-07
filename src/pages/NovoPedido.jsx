@@ -41,6 +41,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Link } from 'react-router-dom';
+import { useToast } from '@/components/ui/use-toast';
 
 const stepsPersonalizado = [
   { id: 1, title: 'Cliente', icon: User },
@@ -86,6 +87,7 @@ const fallbackFormasPagamento = [
 
 export default function NovoPedido() {
   const { user } = useAuth();
+  const { toast } = useToast();
   const [confeitaria, setConfeitaria] = useState(null);
   const [tipoPedido, setTipoPedido] = useState(null); // null = seleção, 'personalizado', 'produto_pronto'
   const [currentStep, setCurrentStep] = useState(1);
@@ -93,6 +95,7 @@ export default function NovoPedido() {
   const [clienteSearch, setClienteSearch] = useState('');
   const [carrinho, setCarrinho] = useState([]);
   const [produtoSearch, setProdutoSearch] = useState('');
+  const [querReservarProdutoPronto, setQuerReservarProdutoPronto] = useState(false);
   const queryClient = useQueryClient();
   const params = new URLSearchParams(window.location.search);
   const editId = params.get('editId');
@@ -218,6 +221,8 @@ export default function NovoPedido() {
   useEffect(() => {
     if (!pedidoParaEditar) return;
     setTipoPedido(pedidoParaEditar.tipo || 'personalizado');
+    setCarrinho(Array.isArray(pedidoParaEditar.produtos_catalogo) ? pedidoParaEditar.produtos_catalogo : []);
+    setQuerReservarProdutoPronto(Boolean(pedidoParaEditar.data_entrega || pedidoParaEditar.horario_entrega));
     setPedido({
       cliente_id:       pedidoParaEditar.cliente_id       || '',
       cliente_nome:     pedidoParaEditar.cliente_nome     || '',
@@ -249,6 +254,50 @@ export default function NovoPedido() {
       valor_total:      pedidoParaEditar.valor_total      || 0,
     });
   }, [pedidoParaEditar]);
+
+  const buildPedidoPayload = () => {
+    const basePayload = {
+      ...pedido,
+      confeitaria_id: user.confeitaria_id,
+      cliente_id: pedido.cliente_id || null,
+      tamanho_id: pedido.tamanho_id || null,
+      massa_id: pedido.massa_id || null,
+      cobertura_id: pedido.cobertura_id || null,
+      forma_pagamento_id: pedido.forma_pagamento_id || null,
+      forma_pagamento: pedido.forma_pagamento_nome || pedido.forma_pagamento || null,
+      forma_pagamento_nome: pedido.forma_pagamento_nome || pedido.forma_pagamento || null,
+      parcelas: Number(pedido.parcelas) || 1,
+      data_entrega: pedido.data_entrega || null,
+      horario_entrega: pedido.horario_entrega || null,
+      endereco_entrega: pedido.endereco_entrega || null,
+      observacoes: pedido.observacoes || null,
+    };
+
+    if (tipoPedido === 'produto_pronto') {
+      return {
+        ...basePayload,
+        numero: null,
+        status: 'orcamento',
+        tipo: 'produto_pronto',
+        data_entrega: querReservarProdutoPronto ? (pedido.data_entrega || null) : null,
+        horario_entrega: querReservarProdutoPronto ? (pedido.horario_entrega || null) : null,
+        valor_total: totalProdutos,
+        produtos_catalogo: carrinho.map((item) => ({
+          id: item.id,
+          nome: item.nome,
+          preco: item.preco,
+          quantidade: item.quantidade,
+        })),
+      };
+    }
+
+    return {
+      ...basePayload,
+      numero: null,
+      status: 'orcamento',
+      tipo: 'personalizado',
+    };
+  };
 
   useEffect(() => {
     if (isEditing || !preselectedClienteId || clientes.length === 0) return;
@@ -303,37 +352,13 @@ export default function NovoPedido() {
 
   const createPedidoMutation = useMutation({
     mutationFn: async () => {
+      const payload = buildPedidoPayload();
+
       if (isEditing) {
-        return appClient.entities.Pedido.update(editId, {
-          ...pedido,
-          confeitaria_id: user.confeitaria_id,
-        });
+        return appClient.entities.Pedido.update(editId, payload);
       }
 
-      if (tipoPedido === 'produto_pronto') {
-        return appClient.entities.Pedido.create({
-          ...pedido,
-          confeitaria_id: user.confeitaria_id,
-          numero: null,
-          status: 'orcamento',
-          tipo: 'produto_pronto',
-          valor_total: totalProdutos,
-          produtos_catalogo: carrinho.map(item => ({
-            id: item.id,
-            nome: item.nome,
-            preco: item.preco,
-            quantidade: item.quantidade,
-          })),
-        });
-      }
-
-      return appClient.entities.Pedido.create({
-        ...pedido,
-        confeitaria_id: user.confeitaria_id,
-        numero: null,
-        status: 'orcamento',
-        tipo: 'personalizado',
-      });
+      return appClient.entities.Pedido.create(payload);
     },
     onSuccess: async (novoPedido) => {
       // Criar parcelas de parcelamento
@@ -360,6 +385,14 @@ export default function NovoPedido() {
       queryClient.invalidateQueries({ queryKey: ['pedidos'] });
       queryClient.invalidateQueries({ queryKey: ['parcelamentos'] });
       window.location.href = createPageUrl('Pedidos');
+    },
+    onError: (error) => {
+      console.error('Erro ao salvar pedido:', error);
+      toast({
+        title: 'Erro ao salvar pedido',
+        description: error?.message || 'Não foi possível criar o pedido agora.',
+        variant: 'destructive',
+      });
     },
   });
 
@@ -432,7 +465,7 @@ export default function NovoPedido() {
       switch (currentStep) {
         case 1: return pedido.cliente_nome && pedido.cliente_telefone;
         case 2: return carrinho.length > 0;
-        case 3: return pedido.data_entrega && pedido.tipo_entrega;
+        case 3: return pedido.tipo_entrega && (!querReservarProdutoPronto || pedido.data_entrega);
         case 4: return pedido.forma_pagamento;
         default: return true;
       }
@@ -477,9 +510,9 @@ export default function NovoPedido() {
             <div className="p-4 rounded-xl bg-rose-100 w-fit mb-4 group-hover:bg-rose-200 transition-colors">
               <Cake className="w-8 h-8 text-rose-600" />
             </div>
-            <h3 className="text-lg font-bold text-gray-900">Bolo Personalizado</h3>
+            <h3 className="text-lg font-bold text-gray-900">Produto Personalizado</h3>
             <p className="text-sm text-gray-500 mt-2">
-              Monte o bolo escolhendo tamanho, massa, recheios, cobertura e extras
+              Monte o produto escolhendo tamanho, massa, recheios, cobertura e extras
             </p>
           </button>
 
@@ -947,9 +980,24 @@ export default function NovoPedido() {
                     onClick={() => addToCarrinho(produto)}
                     className="w-full flex items-center justify-between p-4 rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors text-left"
                   >
-                    <div>
-                      <p className="font-medium text-gray-900">{produto.nome}</p>
-                      {produto.descricao && <p className="text-sm text-gray-500">{produto.descricao}</p>}
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-14 h-14 rounded-xl bg-white border overflow-hidden shrink-0">
+                        {produto.foto_url ? (
+                          <img
+                            src={produto.foto_url}
+                            alt={produto.nome}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center bg-rose-50 text-rose-300">
+                            <Package className="w-5 h-5" />
+                          </div>
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-medium text-gray-900">{produto.nome}</p>
+                        {produto.descricao && <p className="text-sm text-gray-500 line-clamp-2">{produto.descricao}</p>}
+                      </div>
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="font-bold text-rose-600">
@@ -1019,26 +1067,55 @@ export default function NovoPedido() {
                 </>
               )}
 
-              <div>
-                <Label>Data de Entrega *</Label>
-                <Input
-                  type="date"
-                  value={pedido.data_entrega}
-                  onChange={(e) => setPedido({ ...pedido, data_entrega: e.target.value })}
-                  min={format(new Date(), 'yyyy-MM-dd')}
-                  className="mt-1"
-                />
+              <div className="rounded-xl border border-dashed border-rose-200 bg-rose-50/60 p-4 space-y-3">
+                <div className="flex items-start gap-3">
+                  <Checkbox
+                    checked={querReservarProdutoPronto}
+                    onCheckedChange={(checked) => {
+                      const isChecked = Boolean(checked);
+                      setQuerReservarProdutoPronto(isChecked);
+                      if (!isChecked) {
+                        setPedido((prev) => ({
+                          ...prev,
+                          data_entrega: '',
+                          horario_entrega: '',
+                        }));
+                      }
+                    }}
+                  />
+                  <div>
+                    <p className="font-medium text-gray-900">Quero fazer uma reserva</p>
+                    <p className="text-sm text-gray-500">
+                      Ao marcar esta opção, informe a data e o horário para separar o produto.
+                    </p>
+                  </div>
+                </div>
               </div>
 
-              <div>
-                <Label>Horário de Entrega</Label>
-                <Input
-                  type="time"
-                  value={pedido.horario_entrega}
-                  onChange={(e) => setPedido({ ...pedido, horario_entrega: e.target.value })}
-                  className="mt-1"
-                />
-              </div>
+              {querReservarProdutoPronto && (
+                <>
+                  <div>
+                    <Label>Data da Reserva *</Label>
+                    <Input
+                      type="date"
+                      value={pedido.data_entrega}
+                      onChange={(e) => setPedido({ ...pedido, data_entrega: e.target.value })}
+                      min={format(new Date(), 'yyyy-MM-dd')}
+                      className="mt-1"
+                    />
+                  </div>
+
+                  <div>
+                    <Label>Horário da Reserva</Label>
+                    <Input
+                      type="time"
+                      value={pedido.horario_entrega}
+                      onChange={(e) => setPedido({ ...pedido, horario_entrega: e.target.value })}
+                      className="mt-1"
+                    />
+                  </div>
+                </>
+              )}
 
               <div>
                 <Label>Observações</Label>
@@ -1144,8 +1221,10 @@ export default function NovoPedido() {
                   <p className="text-sm text-gray-500">Entrega</p>
                   <p className="font-semibold text-gray-900">
                     {pedido.tipo_entrega === 'delivery' ? 'Delivery' : 'Retirada'}
-                    {pedido.data_entrega && ` — ${format(parseISO(pedido.data_entrega), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}`}
-                    {pedido.horario_entrega && ` às ${pedido.horario_entrega}`}
+                    {querReservarProdutoPronto && pedido.data_entrega
+                      ? ` — ${format(parseISO(pedido.data_entrega), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}`
+                      : ' • Sem reserva'}
+                    {querReservarProdutoPronto && pedido.horario_entrega && ` às ${pedido.horario_entrega}`}
                   </p>
                   {pedido.endereco_entrega && (
                     <p className="text-sm text-gray-600 mt-1">{pedido.endereco_entrega}</p>
