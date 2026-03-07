@@ -71,6 +71,22 @@ export default function SystemNotificationsBell() {
   const [selectedAvisoId, setSelectedAvisoId] = useState(null);
   const [selectedPedidoId, setSelectedPedidoId] = useState(null);
 
+  // Estado local para ocultar notificações sem depender do banco (ou enquanto a tabela não existe)
+  const [dismissedAvisoIds, setDismissedAvisoIds] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('cakeflow_dismissed_avisos') || '[]');
+    } catch {
+      return [];
+    }
+  });
+  const [dismissedPedidoIds, setDismissedPedidoIds] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('cakeflow_dismissed_pedidos') || '[]');
+    } catch {
+      return [];
+    }
+  });
+
   const notificationsQuery = useQuery({
     queryKey: ['system-notifications', 'published'],
     queryFn: () => appClient.entities.SystemNotification.filter({ status: 'published' }, '-published_at'),
@@ -115,19 +131,19 @@ export default function SystemNotificationsBell() {
     return ((notificationsQuery.data || []) || [])
       .map((item) => ({
         ...item,
-        is_read: notificationReadMap.has(item.id)
+        is_read: notificationReadMap.has(item.id) || dismissedAvisoIds.includes(item.id)
       }))
       .filter((item) => !item.is_read);
-  }, [notificationReadMap, notificationsQuery.data]);
+  }, [notificationReadMap, notificationsQuery.data, dismissedAvisoIds]);
 
   const pedidos = useMemo(() => {
     return ((pedidosQuery.data || []) || [])
       .map((item) => ({
         ...item,
-        is_read: pedidoReadMap.has(item.id)
+        is_read: pedidoReadMap.has(item.id) || dismissedPedidoIds.includes(item.id)
       }))
       .filter((item) => !item.is_read);
-  }, [pedidoReadMap, pedidosQuery.data]);
+  }, [pedidoReadMap, pedidosQuery.data, dismissedPedidoIds]);
 
   const unreadCount = avisos.length + pedidos.length;
   const selectedAviso = avisos.find((item) => item.id === selectedAvisoId) || null;
@@ -229,28 +245,32 @@ export default function SystemNotificationsBell() {
   };
 
   const handleMarkAvisoAsRead = async (notification) => {
+    // Oculta localmente primeiro para resposta imediata
+    const newDismissed = [...dismissedAvisoIds, notification.id];
+    setDismissedAvisoIds(newDismissed);
+    localStorage.setItem('cakeflow_dismissed_avisos', JSON.stringify(newDismissed));
+    setSelectedAvisoId((current) => (current === notification.id ? null : current));
+
     try {
       await markAvisoAsReadMutation.mutateAsync(notification.id);
-      setSelectedAvisoId((current) => (current === notification.id ? null : current));
     } catch (error) {
-      toast({
-        title: 'Erro ao marcar aviso como lido',
-        description: error?.message || 'Tente novamente.',
-        variant: 'destructive'
-      });
+      // Ignora erro visualmente se o usuário pediu para apenas ocultar
+      console.warn('Erro ao sincronizar leitura de aviso com o servidor:', error);
     }
   };
 
   const handleMarkPedidoAsRead = async (pedido) => {
+    // Oculta localmente primeiro para resposta imediata
+    const newDismissed = [...dismissedPedidoIds, pedido.id];
+    setDismissedPedidoIds(newDismissed);
+    localStorage.setItem('cakeflow_dismissed_pedidos', JSON.stringify(newDismissed));
+    setSelectedPedidoId((current) => (current === pedido.id ? null : current));
+
     try {
       await markPedidoAsReadMutation.mutateAsync(pedido.id);
-      setSelectedPedidoId((current) => (current === pedido.id ? null : current));
     } catch (error) {
-      toast({
-        title: 'Erro ao marcar pedido como lido',
-        description: error?.message || 'Tente novamente.',
-        variant: 'destructive'
-      });
+      // Ignora erro visualmente conforme solicitado ("apenas oculte")
+      console.warn('Erro ao sincronizar leitura de pedido com o servidor (tabela pode estar faltando):', error);
     }
   };
 
