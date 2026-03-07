@@ -365,7 +365,7 @@ export default function NovoPedido() {
     onSuccess: async () => {
       queryClient.invalidateQueries({ queryKey: ['pedidos'] });
       queryClient.invalidateQueries({ queryKey: ['parcelamentos'] });
-      if (!isEditing) trackEvent('first_order_created');
+      if (!isEditing) await trackEvent('first_order_created');
       window.location.href = createPageUrl('Pedidos');
     },
     onError: (error) => {
