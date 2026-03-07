@@ -4,10 +4,14 @@ import { useQuery, useMutation } from '@tanstack/react-query';
 import {
   X,
   ShoppingCart,
+  ShoppingBag,
   MapPin,
   Store,
   MessageCircle,
-  CheckCircle
+  CheckCircle,
+  Plus,
+  Minus,
+  Trash2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -53,7 +57,7 @@ export default function CarrinhoCheckout({ confeitaria, carrinho, onClose, onUpd
 
   const { data: formasPagamento = [] } = useQuery({
     queryKey: ['formasPagamento', confeitaria?.id],
-    queryFn: () => appClient.entities.FormaPagamento.filter({ 
+    queryFn: () => appClient.entities.FormaPagamento.filter({
       confeitaria_id: confeitaria.id,
       ativo: true
     }),
@@ -77,12 +81,14 @@ export default function CarrinhoCheckout({ confeitaria, carrinho, onClose, onUpd
   ) || null;
   const shouldShowInstallments = selectedPayment && !selectedPayment.a_vista && selectedPayment.parcelamento_max > 1;
   const stepTitles = {
-    1: 'Dados do cliente',
-    2: 'Pagamento e entrega',
-    3: 'Resumo do pedido'
+    1: 'Seu Carrinho',
+    2: 'Dados do cliente',
+    3: 'Pagamento e entrega',
+    4: 'Resumo do pedido'
   };
-  const canAdvanceStep1 = carrinho.length > 0 && clienteData.nome.trim() && clienteData.telefone.trim() && tipoEntrega;
-  const canAdvanceStep2 = !!(formaPagamentoNome || formaPagamento) && (tipoEntrega !== 'delivery' || clienteData.endereco.trim());
+  const canAdvanceStep1 = carrinho.length > 0;
+  const canAdvanceStep2 = carrinho.length > 0 && clienteData.nome.trim() && clienteData.telefone.trim() && tipoEntrega;
+  const canAdvanceStep3 = !!(formaPagamentoNome || formaPagamento) && (tipoEntrega !== 'delivery' || clienteData.endereco.trim());
 
   const criarPedidoMutation = useMutation({
     mutationFn: async () => {
@@ -207,7 +213,7 @@ export default function CarrinhoCheckout({ confeitaria, carrinho, onClose, onUpd
                 Finalizar Pedido
               </h2>
               <p className="text-sm text-gray-500 mt-1">
-                Etapa {step} de 3: {stepTitles[step]}
+                Etapa {step} de 4: {stepTitles[step]}
               </p>
             </div>
             <button
@@ -219,13 +225,12 @@ export default function CarrinhoCheckout({ confeitaria, carrinho, onClose, onUpd
           </div>
 
           <div className="px-6 pt-4">
-            <div className="grid grid-cols-3 gap-2">
-              {[1, 2, 3].map((currentStep) => (
+            <div className="grid grid-cols-4 gap-2">
+              {[1, 2, 3, 4].map((currentStep) => (
                 <div
                   key={currentStep}
-                  className={`h-2 rounded-full transition-colors ${
-                    currentStep <= step ? 'bg-rose-500' : 'bg-gray-200'
-                  }`}
+                  className={`h-2 rounded-full transition-colors ${currentStep <= step ? 'bg-rose-500' : 'bg-gray-200'
+                    }`}
                 />
               ))}
             </div>
@@ -241,6 +246,65 @@ export default function CarrinhoCheckout({ confeitaria, carrinho, onClose, onUpd
             ) : (
               <>
                 {step === 1 && (
+                  <div className="space-y-4">
+                    {carrinho.map((item) => (
+                      <div key={item.id} className="flex items-center gap-4 p-4 bg-gray-50 rounded-xl">
+                        <div className="w-16 h-16 shrink-0 bg-white rounded-lg overflow-hidden border">
+                          {item.foto_url ? (
+                            <img
+                              src={item.foto_url}
+                              alt={item.nome}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center bg-gray-50 text-gray-400">
+                              <ShoppingBag className="w-6 h-6" />
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h4 className="font-semibold text-gray-900 truncate">{item.nome}</h4>
+                          <p className="text-sm text-gray-500">
+                            R$ {item.preco.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} un.
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-4">
+                          <div className="flex items-center border rounded-lg bg-white">
+                            <button
+                              onClick={() => onUpdateQuantidade(item.id, Math.max(1, item.quantidade - 1))}
+                              className="p-2 hover:bg-gray-50 text-gray-500 transition-colors"
+                            >
+                              <Minus className="w-4 h-4" />
+                            </button>
+                            <span className="w-8 text-center font-medium">{item.quantidade}</span>
+                            <button
+                              onClick={() => onUpdateQuantidade(item.id, item.quantidade + 1)}
+                              className="p-2 hover:bg-gray-50 text-gray-500 transition-colors"
+                            >
+                              <Plus className="w-4 h-4" />
+                            </button>
+                          </div>
+                          <button
+                            onClick={() => onRemoverItem(item.id)}
+                            className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                    <div className="pt-4 border-t mt-6">
+                      <div className="flex justify-between items-center text-lg font-bold">
+                        <span>Subtotal do Carrinho</span>
+                        <span className="text-rose-600">
+                          R$ {subtotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {step === 2 && (
                   <div className="space-y-6">
                     <div>
                       <Label className="text-base font-semibold mb-3 block">Tipo de Entrega</Label>
@@ -303,7 +367,7 @@ export default function CarrinhoCheckout({ confeitaria, carrinho, onClose, onUpd
                   </div>
                 )}
 
-                {step === 2 && (
+                {step === 3 && (
                   <div className="space-y-6">
                     <div>
                       <Label>Forma de Pagamento *</Label>
@@ -322,11 +386,10 @@ export default function CarrinhoCheckout({ confeitaria, carrinho, onClose, onUpd
                           {paymentOptions.map((forma) => (
                             <label
                               key={`${forma.id || 'fallback'}-${forma.nome}`}
-                              className={`flex items-start gap-3 p-3 rounded-lg cursor-pointer transition-colors ${
-                                (formaPagamentoNome || formaPagamento) === forma.nome
-                                  ? 'bg-rose-50 border-2 border-rose-500'
-                                  : 'bg-gray-50 border-2 border-transparent hover:bg-gray-100'
-                              }`}
+                              className={`flex items-start gap-3 p-3 rounded-lg cursor-pointer transition-colors ${(formaPagamentoNome || formaPagamento) === forma.nome
+                                ? 'bg-rose-50 border-2 border-rose-500'
+                                : 'bg-gray-50 border-2 border-transparent hover:bg-gray-100'
+                                }`}
                             >
                               <RadioGroupItem value={forma.nome} className="mt-1" />
                               <div>
@@ -352,11 +415,10 @@ export default function CarrinhoCheckout({ confeitaria, carrinho, onClose, onUpd
                           {Array.from({ length: selectedPayment.parcelamento_max }, (_, index) => index + 1).map((parcela) => (
                             <label
                               key={parcela}
-                              className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors ${
-                                Number(parcelas || 1) === parcela
-                                  ? 'bg-rose-50 border-2 border-rose-500'
-                                  : 'bg-gray-50 border-2 border-transparent hover:bg-gray-100'
-                              }`}
+                              className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors ${Number(parcelas || 1) === parcela
+                                ? 'bg-rose-50 border-2 border-rose-500'
+                                : 'bg-gray-50 border-2 border-transparent hover:bg-gray-100'
+                                }`}
                             >
                               <RadioGroupItem value={String(parcela)} />
                               <span className="font-medium">{parcela}x</span>
@@ -390,7 +452,7 @@ export default function CarrinhoCheckout({ confeitaria, carrinho, onClose, onUpd
                   </div>
                 )}
 
-                {step === 3 && (
+                {step === 4 && (
                   <div className="space-y-6">
                     <div className="bg-gray-50 rounded-xl p-4 space-y-3">
                       <h3 className="font-semibold text-gray-900">Dados do Cliente</h3>
@@ -504,8 +566,17 @@ export default function CarrinhoCheckout({ confeitaria, carrinho, onClose, onUpd
             )}
             {step === 3 && (
               <Button
+                onClick={() => setStep(4)}
+                disabled={!canAdvanceStep3}
+                className="flex-1 bg-rose-500 hover:bg-rose-600"
+              >
+                Continuar
+              </Button>
+            )}
+            {step === 4 && (
+              <Button
                 onClick={handleFinalizar}
-                disabled={!canAdvanceStep1 || !canAdvanceStep2 || criarPedidoMutation.isPending}
+                disabled={!canAdvanceStep2 || !canAdvanceStep3 || criarPedidoMutation.isPending}
                 className="flex-1 bg-green-500 hover:bg-green-600"
               >
                 {criarPedidoMutation.isPending ? 'Enviando...' : 'Finalizar Pedido'}

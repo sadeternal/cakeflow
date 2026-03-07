@@ -38,10 +38,10 @@ export default function Catalogo() {
 
     // Extrair slug do subdomínio
     const hostname = window.location.hostname;
-    
+
     // Remover o domínio base (cakeflow.com.br) e pegar apenas o subdomínio
     const subdomain = hostname.replace('.cakeflow.com.br', '').replace('cakeflow.com.br', '');
-    
+
     // Se houver subdomínio e não for 'app' ou 'www', usar como slug
     if (subdomain && subdomain !== 'app' && subdomain !== 'www' && subdomain !== hostname) {
       setSlug(subdomain);
@@ -94,7 +94,7 @@ export default function Catalogo() {
 
   const { data: produtos = [] } = useQuery({
     queryKey: ['produtos-publicos', confeitaria?.id],
-    queryFn: () => appClient.entities.Produto.filter({ 
+    queryFn: () => appClient.entities.Produto.filter({
       confeitaria_id: confeitaria.id,
       disponivel: true
     }),
@@ -317,9 +317,9 @@ export default function Catalogo() {
 
         {/* CTA Pedido Personalizado */}
         {confeitaria.exibir_pedido_personalizado !== false && (
-          <Card 
+          <Card
             className="mb-4 sm:mb-8 border-0 shadow-xl overflow-hidden"
-            style={{ 
+            style={{
               background: `linear-gradient(135deg, ${corPrincipal}15 0%, ${corPrincipal}05 100%)`,
               borderLeft: `4px solid ${corPrincipal}`
             }}
