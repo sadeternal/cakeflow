@@ -51,7 +51,11 @@ import {
   Trash2,
   RefreshCw,
   Ban,
-  ShieldCheck as ShieldCheckIcon
+  ShieldCheck as ShieldCheckIcon,
+  History,
+  CalendarX,
+  ExternalLink,
+  ReceiptText
 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import 'react-quill/dist/quill.snow.css';
@@ -131,6 +135,11 @@ export default function AdminPanel() {
   const [enviandoBrevo, setEnviandoBrevo] = useState({});
   const [sincronizando, setSincronizando] = useState({});
   const [bloqueando, setBloqueando] = useState({});
+  const [cancelandoRecorrencia, setCancelandoRecorrencia] = useState({});
+  const [historyConfeitaria, setHistoryConfeitaria] = useState(null);
+  const [historyData, setHistoryData] = useState(null);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
   const [showNotificationDialog, setShowNotificationDialog] = useState(false);
   const [editingNotification, setEditingNotification] = useState(null);
   const [notificationForm, setNotificationForm] = useState({
@@ -235,6 +244,45 @@ export default function AdminPanel() {
       toast({ title: 'Erro ao alterar bloqueio', description: err?.message || '', variant: 'destructive' });
     } finally {
       setBloqueando(prev => ({ ...prev, [confeitaria.id]: false }));
+    }
+  };
+
+  const handleOpenHistory = async (confeitaria) => {
+    setHistoryConfeitaria(confeitaria);
+    setHistoryData(null);
+    setLoadingHistory(true);
+    try {
+      const resp = await appClient.functions.invoke('getSubscriptionHistory', {
+        confeitaria_id: confeitaria.id
+      });
+      setHistoryData(resp?.data || { subscriptions: [], invoices: [] });
+    } catch (err) {
+      toast({ title: 'Erro ao carregar histórico', description: err?.message || '', variant: 'destructive' });
+      setHistoryData({ subscriptions: [], invoices: [] });
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
+
+  const handleCancelRecorrencia = async () => {
+    if (!historyConfeitaria) return;
+    setCancelandoRecorrencia(prev => ({ ...prev, [historyConfeitaria.id]: true }));
+    try {
+      const resp = await appClient.functions.invoke('cancelSubscription', { confeitaria_id: historyConfeitaria.id });
+      await queryClient.invalidateQueries({ queryKey: ['admin-confeitarias'] });
+      const accessUntil = resp?.data?.access_until;
+      toast({
+        title: 'Recorrência cancelada',
+        description: accessUntil
+          ? `O acesso continua até ${formatarData(accessUntil)}.`
+          : 'O acesso continua até a data de renovação.'
+      });
+      setCancelConfirmOpen(false);
+      setHistoryConfeitaria(null);
+    } catch (err) {
+      toast({ title: 'Erro ao cancelar recorrência', description: err?.message || '', variant: 'destructive' });
+    } finally {
+      setCancelandoRecorrencia(prev => ({ ...prev, [historyConfeitaria?.id]: false }));
     }
   };
 
@@ -532,6 +580,13 @@ export default function AdminPanel() {
                                 : <Mail className="w-4 h-4" />
                               }
                             </button>
+                            <button
+                              onClick={() => handleOpenHistory(c)}
+                              title="Histórico de assinatura"
+                              className="p-1.5 rounded-lg text-gray-400 hover:text-purple-600 hover:bg-purple-50 transition-colors"
+                            >
+                              <History className="w-4 h-4" />
+                            </button>
                           </div>
                         </TableCell>
                       </TableRow>
@@ -765,6 +820,182 @@ export default function AdminPanel() {
           </div>
         </TabsContent>
       </Tabs>
+
+      {/* ─── DIALOG CONFIRMAR CANCELAMENTO ─── */}
+      <Dialog open={cancelConfirmOpen} onOpenChange={setCancelConfirmOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-orange-700">
+              <CalendarX className="w-5 h-5" />
+              Cancelar recorrência?
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2 text-sm text-gray-700">
+            <p>
+              A renovação automática de <strong>{historyConfeitaria?.nome}</strong> será cancelada.
+            </p>
+            {historyConfeitaria?.data_proximo_pagamento && (
+              <div className="rounded-lg bg-orange-50 border border-orange-200 p-3">
+                <p className="font-medium text-orange-800">Tempo restante de acesso:</p>
+                <p className="text-orange-700 mt-0.5">
+                  O acesso permanece ativo até{' '}
+                  <strong>{formatarData(historyConfeitaria.data_proximo_pagamento)}</strong>.
+                  Após essa data, o usuário precisará contratar um novo plano para continuar usando o sistema.
+                </p>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCancelConfirmOpen(false)}>
+              Manter assinatura
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleCancelRecorrencia}
+              disabled={cancelandoRecorrencia[historyConfeitaria?.id]}
+            >
+              {cancelandoRecorrencia[historyConfeitaria?.id]
+                ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Cancelando...</>
+                : 'Sim, cancelar recorrência'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ─── DIALOG HISTÓRICO DE ASSINATURA ─── */}
+      <Dialog open={!!historyConfeitaria && !cancelConfirmOpen} onOpenChange={(open) => !open && setHistoryConfeitaria(null)}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ReceiptText className="w-5 h-5 text-purple-600" />
+              Histórico de Assinatura — {historyConfeitaria?.nome}
+            </DialogTitle>
+          </DialogHeader>
+
+          {loadingHistory ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+            </div>
+          ) : (
+            <div className="space-y-6">
+
+              {/* Assinaturas */}
+              <div>
+                <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                  <History className="w-4 h-4" />
+                  Assinaturas
+                </h4>
+                {!historyData?.subscriptions?.length ? (
+                  <p className="text-sm text-gray-400">Nenhuma assinatura encontrada.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {historyData.subscriptions.map((sub) => (
+                      <div key={sub.id} className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm">
+                        <div className="flex items-center justify-between gap-2 mb-1">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${
+                            sub.status === 'active' ? 'bg-emerald-100 text-emerald-700 border-emerald-200' :
+                            sub.status === 'canceled' ? 'bg-gray-100 text-gray-600 border-gray-200' :
+                            sub.cancel_at_period_end ? 'bg-orange-100 text-orange-700 border-orange-200' :
+                            sub.status === 'past_due' ? 'bg-red-100 text-red-700 border-red-200' :
+                            sub.status === 'trialing' ? 'bg-amber-100 text-amber-700 border-amber-200' :
+                            'bg-gray-100 text-gray-600 border-gray-200'
+                          }`}>
+                            {sub.cancel_at_period_end ? 'Cancelamento agendado' :
+                              sub.status === 'active' ? 'Ativo' :
+                              sub.status === 'canceled' ? 'Cancelado' :
+                              sub.status === 'past_due' ? 'Inadimplente' :
+                              sub.status === 'trialing' ? 'Trial' :
+                              sub.status}
+                          </span>
+                          <span className="text-xs text-gray-400 font-mono">{sub.id}</span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-gray-600 mt-1">
+                          <span>Criado: {formatarData(sub.created)}</span>
+                          {sub.trial_end && <span>Fim trial: {formatarData(sub.trial_end)}</span>}
+                          {sub.current_period_start && <span>Período início: {formatarData(sub.current_period_start)}</span>}
+                          {sub.current_period_end && <span>Período fim: {formatarData(sub.current_period_end)}</span>}
+                          {sub.canceled_at && <span className="text-red-600">Cancelado em: {formatarData(sub.canceled_at)}</span>}
+                          {sub.ended_at && <span className="text-red-600">Encerrado em: {formatarData(sub.ended_at)}</span>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Faturas */}
+              <div>
+                <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                  <ReceiptText className="w-4 h-4" />
+                  Faturas
+                </h4>
+                {!historyData?.invoices?.length ? (
+                  <p className="text-sm text-gray-400">Nenhuma fatura encontrada.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {historyData.invoices.map((inv) => (
+                      <div key={inv.id} className="rounded-lg border border-gray-200 bg-white p-3 text-sm flex items-center justify-between gap-4">
+                        <div className="space-y-0.5">
+                          <div className="flex items-center gap-2">
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${
+                              inv.status === 'paid' ? 'bg-emerald-100 text-emerald-700 border-emerald-200' :
+                              inv.status === 'open' ? 'bg-amber-100 text-amber-700 border-amber-200' :
+                              inv.status === 'void' ? 'bg-gray-100 text-gray-500 border-gray-200' :
+                              'bg-red-100 text-red-700 border-red-200'
+                            }`}>
+                              {inv.status === 'paid' ? 'Pago' : inv.status === 'open' ? 'Em aberto' : inv.status === 'void' ? 'Anulado' : inv.status}
+                            </span>
+                            {inv.number && <span className="text-xs text-gray-400">{inv.number}</span>}
+                          </div>
+                          <p className="text-gray-600">
+                            {formatarData(inv.created)}
+                            {inv.period_start && inv.period_end && (
+                              <span className="text-gray-400"> · {formatarData(inv.period_start)} → {formatarData(inv.period_end)}</span>
+                            )}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-3 shrink-0">
+                          <span className="font-semibold text-gray-900">
+                            {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: (inv.currency || 'brl').toUpperCase() }).format((inv.amount_paid || 0) / 100)}
+                          </span>
+                          {inv.hosted_invoice_url && (
+                            <a
+                              href={inv.hosted_invoice_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="p-1.5 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                              title="Ver fatura"
+                            >
+                              <ExternalLink className="w-4 h-4" />
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="flex-row justify-between items-center gap-2">
+            <div>
+              {historyConfeitaria?.stripe_subscription_id &&
+                (historyConfeitaria?.status_assinatura === 'active' || historyConfeitaria?.status_assinatura === 'past_due') && (
+                <Button
+                  variant="outline"
+                  className="text-orange-600 border-orange-200 hover:bg-orange-50 hover:text-orange-700"
+                  onClick={() => setCancelConfirmOpen(true)}
+                >
+                  <CalendarX className="w-4 h-4 mr-2" />
+                  Cancelar recorrência
+                </Button>
+              )}
+            </div>
+            <Button variant="outline" onClick={() => setHistoryConfeitaria(null)}>Fechar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={showNotificationDialog} onOpenChange={(open) => !open && resetNotificationForm()}>
         <DialogContent>
