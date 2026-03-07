@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { createPageUrl } from '@/utils';
 import { useAuth } from '@/lib/AuthContext';
 import { syncClientToBrevo } from '@/lib/brevoClientSync';
+import { useEventTracker } from '@/lib/useEventTracker';
 import { format, differenceInDays, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
@@ -87,6 +88,7 @@ const fallbackFormasPagamento = [
 
 export default function NovoPedido() {
   const { user } = useAuth();
+  const { trackEvent } = useEventTracker();
   const { toast } = useToast();
   const [confeitaria, setConfeitaria] = useState(null);
   const [tipoPedido, setTipoPedido] = useState(null); // null = seleção, 'personalizado', 'produto_pronto'
@@ -363,6 +365,7 @@ export default function NovoPedido() {
     onSuccess: async () => {
       queryClient.invalidateQueries({ queryKey: ['pedidos'] });
       queryClient.invalidateQueries({ queryKey: ['parcelamentos'] });
+      if (!isEditing) trackEvent('first_order_created');
       window.location.href = createPageUrl('Pedidos');
     },
     onError: (error) => {

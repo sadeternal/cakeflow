@@ -25,6 +25,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/components/ui/use-toast';
 import { syncClientToBrevo } from '@/lib/brevoClientSync';
+import { useEventTracker } from '@/lib/useEventTracker';
 import {
   Dialog,
   DialogContent,
@@ -42,6 +43,7 @@ import {
 export default function Clientes() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const { trackEvent } = useEventTracker();
   const [search, setSearch] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editingCliente, setEditingCliente] = useState(null);
@@ -170,6 +172,7 @@ export default function Clientes() {
     },
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['clientes', user?.confeitaria_id] });
+      if (!editingCliente) trackEvent('first_client_created');
       toast({
         title: editingCliente ? 'Cliente atualizado' : 'Cliente criado',
         description:
@@ -271,7 +274,7 @@ export default function Clientes() {
         </Button>
       </div>
 
-      {/* Clientes Grid */}
+      {/* Clientes List */}
       {isLoading ? (
         <div className="text-center py-12 text-gray-500">Carregando...</div>
       ) : filteredClientes.length === 0 ? (
@@ -288,113 +291,238 @@ export default function Clientes() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {filteredClientes.map((cliente) => {
-            const clientePedidos = getClientePedidos(cliente.id);
-            const totalGasto = clientePedidos.reduce((acc, p) => acc + (p.valor_total || 0), 0);
+        <>
+          {/* Mobile: card grid */}
+          <div className="grid gap-4 md:hidden">
+            {filteredClientes.map((cliente) => {
+              const clientePedidos = getClientePedidos(cliente.id);
+              const totalGasto = clientePedidos.reduce((acc, p) => acc + (p.valor_total || 0), 0);
 
-            return (
-              <Card
-                key={cliente.id}
-                className="border-0 shadow-lg shadow-gray-100/50 hover:shadow-xl transition-shadow cursor-pointer group"
-                onClick={() => setSelectedCliente(cliente)}
-              >
-                <CardContent className="p-5">
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-rose-100 to-rose-200 flex items-center justify-center">
-                        <span className="text-lg font-bold text-rose-600">
-                          {cliente.nome?.[0]?.toUpperCase()}
+              return (
+                <Card
+                  key={cliente.id}
+                  className="border-0 shadow-lg shadow-gray-100/50 hover:shadow-xl transition-shadow cursor-pointer group"
+                  onClick={() => setSelectedCliente(cliente)}
+                >
+                  <CardContent className="p-5">
+                    <div className="flex items-start justify-between mb-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-rose-100 to-rose-200 flex items-center justify-center">
+                          <span className="text-lg font-bold text-rose-600">
+                            {cliente.nome?.[0]?.toUpperCase()}
+                          </span>
+                        </div>
+                        <div>
+                          <h3 className="font-semibold text-gray-900 group-hover:text-rose-600 transition-colors">
+                            {cliente.nome}
+                          </h3>
+                          {clientePedidos.length > 0 && (
+                            <Badge variant="secondary" className="mt-1">
+                              {clientePedidos.length} pedido(s)
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2 text-sm">
+                      {cliente.telefone && (
+                        <div className="flex items-center gap-2 text-gray-600">
+                          <Phone className="w-3.5 h-3.5" />
+                          {cliente.telefone}
+                        </div>
+                      )}
+                      {cliente.email && (
+                        <div className="flex items-center gap-2 text-gray-600 truncate">
+                          <Mail className="w-3.5 h-3.5 shrink-0" />
+                          <span className="truncate">{cliente.email}</span>
+                        </div>
+                      )}
+                      {cliente.bairro && (
+                        <div className="flex items-center gap-2 text-gray-600">
+                          <MapPin className="w-3.5 h-3.5" />
+                          {cliente.bairro}
+                        </div>
+                      )}
+                    </div>
+
+                    {totalGasto > 0 && (
+                      <div className="mt-4 pt-4 border-t flex items-center justify-between">
+                        <span className="text-sm text-gray-500">Total gasto</span>
+                        <span className="font-semibold text-rose-600">
+                          R$ {totalGasto.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                         </span>
                       </div>
-                      <div>
-                        <h3 className="font-semibold text-gray-900 group-hover:text-rose-600 transition-colors">
-                          {cliente.nome}
-                        </h3>
-                        {clientePedidos.length > 0 && (
-                          <Badge variant="secondary" className="mt-1">
-                            {clientePedidos.length} pedido(s)
-                          </Badge>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2 text-sm">
-                    {cliente.telefone && (
-                      <div className="flex items-center gap-2 text-gray-600">
-                        <Phone className="w-3.5 h-3.5" />
-                        {cliente.telefone}
-                      </div>
                     )}
-                    {cliente.email && (
-                      <div className="flex items-center gap-2 text-gray-600 truncate">
-                        <Mail className="w-3.5 h-3.5 shrink-0" />
-                        <span className="truncate">{cliente.email}</span>
-                      </div>
-                    )}
-                    {cliente.bairro && (
-                      <div className="flex items-center gap-2 text-gray-600">
-                        <MapPin className="w-3.5 h-3.5" />
-                        {cliente.bairro}
-                      </div>
-                    )}
-                  </div>
 
-                  {totalGasto > 0 && (
-                    <div className="mt-4 pt-4 border-t flex items-center justify-between">
-                      <span className="text-sm text-gray-500">Total gasto</span>
-                      <span className="font-semibold text-rose-600">
-                        R$ {totalGasto.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                      </span>
-                    </div>
-                  )}
-
-                  <div className="mt-4 flex gap-2" onClick={(e) => e.stopPropagation()}>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="flex-1 border-rose-200 text-rose-600 hover:bg-rose-50"
-                      onClick={() => handleNovoPedido(cliente)}
-                    >
-                      <Cake className="w-4 h-4 mr-1" />
-                      Novo Pedido
-                    </Button>
-                    {cliente.telefone && (
+                    <div className="mt-4 flex gap-2" onClick={(e) => e.stopPropagation()}>
                       <Button
                         size="sm"
                         variant="outline"
-                        className="flex-1 text-green-600 border-green-200 hover:bg-green-50"
-                        onClick={() => handleWhatsApp(cliente.telefone)}
+                        className="flex-1 border-rose-200 text-rose-600 hover:bg-rose-50"
+                        title="Novo Pedido"
+                        onClick={() => handleNovoPedido(cliente)}
                       >
-                        <MessageCircle className="w-4 h-4 mr-1" />
-                        WhatsApp
+                        <Cake className="w-4 h-4" />
                       </Button>
-                    )}
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => openEditForm(cliente)}
+                      {cliente.telefone && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="flex-1 text-green-600 border-green-200 hover:bg-green-50"
+                          title="WhatsApp"
+                          onClick={() => handleWhatsApp(cliente.telefone)}
+                        >
+                          <MessageCircle className="w-4 h-4" />
+                        </Button>
+                      )}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        title="Editar"
+                        onClick={() => openEditForm(cliente)}
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-red-600 border-red-200 hover:bg-red-50"
+                        title="Excluir"
+                        onClick={() => {
+                          setClienteToDelete(cliente);
+                          setShowDeleteDialog(true);
+                        }}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+
+          {/* Desktop: list view */}
+          <div className="hidden md:block">
+            <Card className="border-0 shadow-lg shadow-gray-100/50 overflow-hidden">
+              <div className="divide-y divide-gray-100">
+                {filteredClientes.map((cliente) => {
+                  const clientePedidos = getClientePedidos(cliente.id);
+                  const totalGasto = clientePedidos.reduce((acc, p) => acc + (p.valor_total || 0), 0);
+
+                  return (
+                    <div
+                      key={cliente.id}
+                      className="flex items-center gap-4 px-5 py-3.5 hover:bg-gray-50 transition-colors cursor-pointer group"
+                      onClick={() => setSelectedCliente(cliente)}
                     >
-                      <Pencil className="w-4 h-4" />
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="text-red-600 border-red-200 hover:bg-red-50"
-                      onClick={() => {
-                        setClienteToDelete(cliente);
-                        setShowDeleteDialog(true);
-                      }}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
+                      {/* Avatar + Nome */}
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                        <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-rose-100 to-rose-200 flex items-center justify-center shrink-0">
+                          <span className="text-sm font-bold text-rose-600">
+                            {cliente.nome?.[0]?.toUpperCase()}
+                          </span>
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-semibold text-gray-900 group-hover:text-rose-600 transition-colors truncate">
+                            {cliente.nome}
+                          </p>
+                          {cliente.bairro && (
+                            <p className="text-xs text-gray-400 truncate">{cliente.bairro}</p>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Telefone */}
+                      <div className="w-36 shrink-0 hidden lg:block">
+                        {cliente.telefone ? (
+                          <p className="text-sm text-gray-600 flex items-center gap-1.5">
+                            <Phone className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                            {cliente.telefone}
+                          </p>
+                        ) : (
+                          <span className="text-gray-300 text-sm">—</span>
+                        )}
+                      </div>
+
+                      {/* Email */}
+                      <div className="flex-1 min-w-0 hidden xl:block">
+                        {cliente.email ? (
+                          <p className="text-sm text-gray-600 flex items-center gap-1.5 truncate">
+                            <Mail className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                            <span className="truncate">{cliente.email}</span>
+                          </p>
+                        ) : (
+                          <span className="text-gray-300 text-sm">—</span>
+                        )}
+                      </div>
+
+                      {/* Pedidos + Total */}
+                      <div className="w-28 shrink-0 text-right hidden lg:block">
+                        {clientePedidos.length > 0 ? (
+                          <>
+                            <p className="text-sm font-semibold text-rose-600">
+                              R$ {totalGasto.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                            </p>
+                            <p className="text-xs text-gray-400">{clientePedidos.length} pedido(s)</p>
+                          </>
+                        ) : (
+                          <span className="text-gray-300 text-sm">—</span>
+                        )}
+                      </div>
+
+                      {/* Ações */}
+                      <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-8 w-8 p-0 text-rose-500 hover:bg-rose-50"
+                          title="Novo Pedido"
+                          onClick={() => handleNovoPedido(cliente)}
+                        >
+                          <Cake className="w-4 h-4" />
+                        </Button>
+                        {cliente.telefone && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-8 w-8 p-0 text-green-600 hover:bg-green-50"
+                            title="WhatsApp"
+                            onClick={() => handleWhatsApp(cliente.telefone)}
+                          >
+                            <MessageCircle className="w-4 h-4" />
+                          </Button>
+                        )}
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-8 w-8 p-0 text-gray-500 hover:bg-gray-100"
+                          title="Editar"
+                          onClick={() => openEditForm(cliente)}
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-8 w-8 p-0 text-red-500 hover:bg-red-50"
+                          title="Excluir"
+                          onClick={() => {
+                            setClienteToDelete(cliente);
+                            setShowDeleteDialog(true);
+                          }}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </Card>
+          </div>
+        </>
       )}
 
       {/* Form Dialog */}

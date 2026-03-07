@@ -55,7 +55,12 @@ import {
   History,
   CalendarX,
   ExternalLink,
-  ReceiptText
+  ReceiptText,
+  Activity,
+  Flame,
+  UserCheck,
+  UserX,
+  Filter
 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import 'react-quill/dist/quill.snow.css';
@@ -147,6 +152,10 @@ export default function AdminPanel() {
     message: ''
   });
 
+  // Funil de Trial
+  const [funnelPeriod, setFunnelPeriod] = useState('14');
+  const [funnelSegmento, setFunnelSegmento] = useState('todos');
+
   // Guard: apenas admin
   if (user && user.role !== 'admin') {
     window.location.href = createPageUrl('Dashboard');
@@ -163,6 +172,16 @@ export default function AdminPanel() {
     queryKey: ['admin-system-notifications'],
     queryFn: () => appClient.entities.SystemNotification.filter({}, '-published_at'),
     enabled: user?.role === 'admin'
+  });
+
+  const { data: funnelData, isLoading: isLoadingFunnel, refetch: refetchFunnel } = useQuery({
+    queryKey: ['admin-trial-funnel', funnelPeriod],
+    queryFn: async () => {
+      const resp = await appClient.functions.invoke('getTrialFunnel', { period_days: Number(funnelPeriod) });
+      return resp?.data?.users || [];
+    },
+    enabled: user?.role === 'admin',
+    staleTime: 5 * 60 * 1000,
   });
 
   // --- Métricas ---
@@ -395,6 +414,7 @@ export default function AdminPanel() {
         <TabsList>
           <TabsTrigger value="leads">Leads & Usuários</TabsTrigger>
           <TabsTrigger value="relatorios">Relatórios</TabsTrigger>
+          <TabsTrigger value="funil">Funil de Trial</TabsTrigger>
           <TabsTrigger value="avisos">Avisos do Sistema</TabsTrigger>
         </TabsList>
 
@@ -716,6 +736,255 @@ export default function AdminPanel() {
                   </div>
                 ));
             })()}
+          </div>
+
+        </TabsContent>
+
+        {/* ─── ABA FUNIL DE TRIAL ─── */}
+        <TabsContent value="funil" className="mt-6 space-y-6">
+
+          {/* Filtros */}
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2">
+              <Filter className="w-4 h-4 text-gray-400" />
+              <span className="text-sm text-gray-500">Período:</span>
+              <Select value={funnelPeriod} onValueChange={(v) => setFunnelPeriod(v)}>
+                <SelectTrigger className="w-36">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="7">Últimos 7 dias</SelectItem>
+                  <SelectItem value="14">Últimos 14 dias</SelectItem>
+                  <SelectItem value="30">Últimos 30 dias</SelectItem>
+                  <SelectItem value="60">Últimos 60 dias</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-gray-500">Segmento:</span>
+              <Select value={funnelSegmento} onValueChange={setFunnelSegmento}>
+                <SelectTrigger className="w-40">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todos</SelectItem>
+                  <SelectItem value="inativo">Inativo</SelectItem>
+                  <SelectItem value="ativo">Ativo</SelectItem>
+                  <SelectItem value="engajado">Engajado</SelectItem>
+                  <SelectItem value="convertido">Convertido</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <Button variant="outline" size="sm" onClick={() => refetchFunnel()}>
+              <RefreshCw className="w-4 h-4 mr-1" />
+              Atualizar
+            </Button>
+          </div>
+
+          {/* Métricas */}
+          {(() => {
+            const users = funnelData || [];
+            const total = users.length;
+            const convertidos = users.filter(u => u.segmento === 'convertido').length;
+            const engajados = users.filter(u => u.segmento === 'engajado').length;
+            const ativos = users.filter(u => u.segmento === 'ativo').length;
+            const inativos = users.filter(u => u.segmento === 'inativo').length;
+            const pct = (n) => total > 0 ? Math.round((n / total) * 100) : 0;
+
+            return (
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-2">
+                  <div className="flex items-center gap-2 text-gray-500 text-sm">
+                    <Users className="w-4 h-4" />
+                    Total no período
+                  </div>
+                  <p className="text-3xl font-bold text-gray-900">{total}</p>
+                </div>
+                <div className="bg-white rounded-xl border border-emerald-200 p-5 space-y-2">
+                  <div className="flex items-center gap-2 text-emerald-600 text-sm">
+                    <UserCheck className="w-4 h-4" />
+                    Convertidos
+                  </div>
+                  <p className="text-3xl font-bold text-emerald-700">{convertidos}</p>
+                  <p className="text-xs text-emerald-600">{pct(convertidos)}% do total</p>
+                </div>
+                <div className="bg-white rounded-xl border border-blue-200 p-5 space-y-2">
+                  <div className="flex items-center gap-2 text-blue-600 text-sm">
+                    <Flame className="w-4 h-4" />
+                    Engajados
+                  </div>
+                  <p className="text-3xl font-bold text-blue-700">{engajados}</p>
+                  <p className="text-xs text-blue-600">{pct(engajados)}% do total</p>
+                </div>
+                <div className="bg-white rounded-xl border border-red-200 p-5 space-y-2">
+                  <div className="flex items-center gap-2 text-red-600 text-sm">
+                    <UserX className="w-4 h-4" />
+                    Inativos
+                  </div>
+                  <p className="text-3xl font-bold text-red-700">{inativos}</p>
+                  <p className="text-xs text-red-600">{pct(inativos)}% do total</p>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Barra de funil visual */}
+          {funnelData && funnelData.length > 0 && (() => {
+            const users = funnelData;
+            const total = users.length;
+            const steps = [
+              { label: 'Registrados', count: total, color: 'bg-gray-400' },
+              { label: 'Ativos (≥1 ação)', count: users.filter(u => u.has_first_order || u.has_first_client).length, color: 'bg-amber-400' },
+              { label: 'Engajados (3+ dias)', count: users.filter(u => u.session_days >= 3).length, color: 'bg-blue-500' },
+              { label: 'Visitaram Planos', count: users.filter(u => u.has_viewed_plans).length, color: 'bg-purple-500' },
+              { label: 'Convertidos', count: users.filter(u => u.segmento === 'convertido').length, color: 'bg-emerald-500' },
+            ];
+            return (
+              <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-3">
+                <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                  <Activity className="w-4 h-4 text-rose-500" />
+                  Funil de conversão
+                </h3>
+                {steps.map((step, i) => (
+                  <div key={i} className="space-y-1">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">{step.label}</span>
+                      <span className="font-medium text-gray-900">
+                        {step.count}{' '}
+                        <span className="text-gray-400 font-normal">
+                          ({total > 0 ? Math.round((step.count / total) * 100) : 0}%)
+                        </span>
+                      </span>
+                    </div>
+                    <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all ${step.color}`}
+                        style={{ width: `${total > 0 ? (step.count / total) * 100 : 0}%` }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
+
+          {/* Tabela de usuários */}
+          <div className="rounded-xl border border-gray-200 overflow-hidden bg-white">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-gray-50">
+                  <TableHead>Confeitaria</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Segmento</TableHead>
+                  <TableHead>Trial</TableHead>
+                  <TableHead>Dias ativos</TableHead>
+                  <TableHead>Ações</TableHead>
+                  <TableHead>Planos</TableHead>
+                  <TableHead>Feedback</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {isLoadingFunnel ? (
+                  <TableRow>
+                    <TableCell colSpan={8} className="text-center py-12 text-gray-400">
+                      Carregando funil...
+                    </TableCell>
+                  </TableRow>
+                ) : (() => {
+                  const users = (funnelData || []).filter(u =>
+                    funnelSegmento === 'todos' || u.segmento === funnelSegmento
+                  );
+
+                  if (users.length === 0) {
+                    return (
+                      <TableRow>
+                        <TableCell colSpan={8} className="text-center py-12 text-gray-400">
+                          Nenhum usuário encontrado para este período/segmento.
+                        </TableCell>
+                      </TableRow>
+                    );
+                  }
+
+                  const SEGMENTO_STYLE = {
+                    inativo:    'bg-red-100 text-red-700 border-red-200',
+                    ativo:      'bg-amber-100 text-amber-700 border-amber-200',
+                    engajado:   'bg-blue-100 text-blue-700 border-blue-200',
+                    convertido: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+                  };
+                  const SEGMENTO_LABEL = {
+                    inativo: 'Inativo', ativo: 'Ativo', engajado: 'Engajado', convertido: 'Convertido',
+                  };
+
+                  return users.map(u => (
+                    <TableRow key={u.confeitaria_id}>
+                      <TableCell>
+                        <div className="font-medium text-gray-900">{u.nome || '—'}</div>
+                        {u.owner_email && (
+                          <div className="text-xs text-gray-400">{u.owner_email}</div>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border ${STATUS_COLOR[u.status_assinatura] || STATUS_COLOR.incomplete}`}>
+                          {STATUS_LABELS[u.status_assinatura] || u.status_assinatura || '—'}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border ${SEGMENTO_STYLE[u.segmento] || ''}`}>
+                          {SEGMENTO_LABEL[u.segmento] || u.segmento}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-sm text-gray-600">
+                        {u.data_fim_trial ? (() => {
+                          const dias = differenceInDays(parseISO(u.data_fim_trial), hoje);
+                          if (u.status_assinatura !== 'trial') return '—';
+                          return dias > 0
+                            ? <span className={dias <= 2 ? 'text-red-600 font-medium' : 'text-amber-600'}>{dias}d restantes</span>
+                            : <span className="text-red-600 font-medium">Expirado</span>;
+                        })() : '—'}
+                      </TableCell>
+                      <TableCell className="text-sm text-gray-700 font-medium">
+                        {u.session_days ?? 0}
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        <div className="flex items-center gap-2">
+                          {u.has_first_order && (
+                            <span className="text-xs bg-rose-100 text-rose-700 rounded px-1.5 py-0.5">Pedido</span>
+                          )}
+                          {u.has_first_client && (
+                            <span className="text-xs bg-purple-100 text-purple-700 rounded px-1.5 py-0.5">Cliente</span>
+                          )}
+                          {!u.has_first_order && !u.has_first_client && (
+                            <span className="text-gray-300">—</span>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        {u.has_viewed_plans
+                          ? <CheckCircle className="w-4 h-4 text-emerald-500" />
+                          : <span className="text-gray-300 text-sm">—</span>
+                        }
+                      </TableCell>
+                      <TableCell className="text-xs text-gray-400">
+                        {u.feedback_requested_at
+                          ? formatarData(u.feedback_requested_at)
+                          : <span className="text-gray-300">—</span>
+                        }
+                      </TableCell>
+                    </TableRow>
+                  ));
+                })()}
+              </TableBody>
+            </Table>
+          </div>
+
+          {/* Nota sobre email trigger */}
+          <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+            <p className="font-medium mb-1">Trigger de feedback pós-expiração</p>
+            <p>
+              A coluna <code className="bg-amber-100 px-1 rounded">feedback_requested_at</code> é preenchida automaticamente
+              48h após o trial expirar sem conversão. Execute a edge function <code className="bg-amber-100 px-1 rounded">checkExpiredTrials</code> periodicamente
+              (ou via pg_cron) para marcar esses usuários e disparar o email de feedback.
+            </p>
           </div>
 
         </TabsContent>

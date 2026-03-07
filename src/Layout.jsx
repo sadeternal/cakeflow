@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { createPageUrl } from './utils';
 import { appClient } from '@/api/appClient';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/lib/AuthContext';
+import { useEventTracker } from '@/lib/useEventTracker';
 import CakeflowLogoIcon from '@/components/CakeflowLogoIcon';
 import {
   LayoutDashboard,
@@ -53,6 +54,8 @@ export default function Layout({ children, currentPageName }) {
   const { user } = useAuth();
   const [showTrialExpired, setShowTrialExpired] = useState(false);
   const isAdminUser = user?.role === 'admin';
+  const { trackEvent } = useEventTracker();
+  const sessionTrackedRef = useRef(false);
   const isPublicPage =
     currentPageName === 'Onboarding' ||
     currentPageName === 'Login' ||
@@ -68,6 +71,13 @@ export default function Layout({ children, currentPageName }) {
       document.title = `Cakeflow | ${pageTitle}`;
     }
   }, [currentPageName]);
+
+  // Rastreia session_day uma vez por sessão (deduplicação real feita no banco, 1 por dia)
+  useEffect(() => {
+    if (isPublicPage || !user || isAdminUser || sessionTrackedRef.current) return;
+    sessionTrackedRef.current = true;
+    trackEvent('session_day');
+  }, [user, isPublicPage, isAdminUser]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (isPublicPage || !user || isAdminUser) return;

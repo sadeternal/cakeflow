@@ -21,6 +21,7 @@ import {
   EyeOff
 } from 'lucide-react';
 import AssinaturasTab from '@/components/configuracoes/AssinaturasTab';
+import { useEventTracker } from '@/lib/useEventTracker';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -110,6 +111,7 @@ const normalizeEtapasPedido = (etapas) => {
 export default function Configuracoes() {
   const { user } = useAuth();
   const { toast, dismiss } = useToast();
+  const { trackEvent } = useEventTracker();
   const urlParams = new URLSearchParams(window.location.search);
   const [activeTab, setActiveTab] = useState(urlParams.get('tab') || 'geral');
   const queryClient = useQueryClient();
@@ -506,7 +508,10 @@ export default function Configuracoes() {
 
   return (
     <div className="space-y-6">
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
+      <Tabs value={activeTab} onValueChange={(tab) => {
+        setActiveTab(tab);
+        if (tab === 'assinaturas') trackEvent('plans_page_viewed');
+      }}>
         <TabsList className="grid w-full grid-cols-4 bg-white border-b border-gray-200 p-0 rounded-none h-auto gap-0">
           <TabsTrigger
             value="geral"
