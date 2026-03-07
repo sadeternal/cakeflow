@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { createPageUrl } from '@/utils';
 import { useAuth } from '@/lib/AuthContext';
 import { syncClientToBrevo } from '@/lib/brevoClientSync';
-import { format, differenceInDays, parseISO, addMonths } from 'date-fns';
+import { format, differenceInDays, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
   ChevronLeft,
@@ -360,28 +360,7 @@ export default function NovoPedido() {
 
       return appClient.entities.Pedido.create(payload);
     },
-    onSuccess: async (novoPedido) => {
-      // Criar parcelas de parcelamento
-      if (!isEditing && pedido.forma_pagamento_id) {
-        const numParcelas = pedido.parcelas || 1;
-        const valorTotal = tipoPedido === 'produto_pronto' ? totalProdutos : (pedido.valor_total || 0);
-        const valorParcela = Math.round((valorTotal / numParcelas) * 100) / 100;
-        const dataBase = pedido.data_entrega ? parseISO(pedido.data_entrega) : new Date();
-        try {
-          for (let i = 1; i <= numParcelas; i++) {
-            await appClient.entities.ParcelamentoPedido.create({
-              pedido_id: novoPedido.id,
-              numero_parcela: i,
-              valor: valorParcela,
-              data_vencimento: format(addMonths(dataBase, i - 1), 'yyyy-MM-dd'),
-              confeitaria_id: user.confeitaria_id,
-              status: 'pendente',
-            });
-          }
-        } catch (e) {
-          console.error('Erro ao criar parcelas:', e);
-        }
-      }
+    onSuccess: async () => {
       queryClient.invalidateQueries({ queryKey: ['pedidos'] });
       queryClient.invalidateQueries({ queryKey: ['parcelamentos'] });
       window.location.href = createPageUrl('Pedidos');

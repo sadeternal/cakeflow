@@ -97,6 +97,7 @@ export default function Pedidos() {
     mutationFn: ({ id, status }) => appClient.entities.Pedido.update(id, { status }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['pedidos'] });
+      queryClient.invalidateQueries({ queryKey: ['parcelamentos'] });
     },
   });
 

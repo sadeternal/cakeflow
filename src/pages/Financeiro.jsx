@@ -50,6 +50,48 @@ const tiposReceber = [
   { value: 'outro', label: 'Outro' },
 ];
 
+const normalizePaymentName = (value = '') =>
+  String(value)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+
+const isPixPayment = (value = '') => normalizePaymentName(value).includes('pix');
+
+const getPedidoPaymentName = (pedido = null) =>
+  pedido?.forma_pagamento_nome || pedido?.forma_pagamento || 'Não definido';
+
+const getPedidoPaymentBadge = (pedido = null, installments = 1) => {
+  const paymentName = getPedidoPaymentName(pedido);
+
+  if (installments > 1) {
+    return {
+      label: `${installments}x`,
+      className: 'bg-blue-100 text-blue-600',
+    };
+  }
+
+  return {
+    label: 'À vista',
+    className: isPixPayment(paymentName) ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-600',
+  };
+};
+
+const getPedidoPaymentMeta = (pedido = null, parcela = null, installments = 1) => {
+  const paymentName = getPedidoPaymentName(pedido);
+  const installmentValue = Number(parcela?.valor || 0);
+
+  if (installments > 1) {
+    return `${paymentName} • ${installments}x de R$ ${installmentValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+  }
+
+  if (isPixPayment(paymentName)) {
+    return 'Pix • À vista';
+  }
+
+  return `${paymentName} • À vista`;
+};
+
 const formatRecebimentoTitle = (conta) => {
   const numeroPedido = conta.pedido_numero ? `Pedido #${conta.pedido_numero}` : null;
   return numeroPedido || conta.cliente_nome || conta.descricao;
@@ -228,6 +270,18 @@ export default function Financeiro() {
     return isWithinInterval(date, { start: inicioMes, end: fimMes });
   });
 
+  const installmentCountsByPedido = parcelamentos.reduce((acc, parcela) => {
+    if (!parcela?.pedido_id) return acc;
+    acc[parcela.pedido_id] = (acc[parcela.pedido_id] || 0) + 1;
+    return acc;
+  }, {});
+
+  const getPedidoInstallments = (pedido = null) => {
+    const parcelamentoCount = pedido?.id ? installmentCountsByPedido[pedido.id] : 0;
+    if (parcelamentoCount > 0) return parcelamentoCount;
+    return Math.max(Number(pedido?.parcelas) || 1, 1);
+  };
+
   const parcelasPendentes = parcelamentosMes.filter(p => p.status === 'pendente');
   const parcelasRecebidasMes = parcelamentosMes.filter(p => p.status === 'pago');
 
@@ -347,15 +401,17 @@ export default function Financeiro() {
                   const pendentesItems = [
                     ...parcelasPendentes.map(p => {
                       const ped = pedidos.find(pd => pd.id === p.pedido_id);
-                      const isAvista = (ped?.parcelas || 1) <= 1;
+                      const installments = getPedidoInstallments(ped);
+                      const badge = getPedidoPaymentBadge(ped, installments);
                       return {
                         id: p.id,
                         tipo: 'parcela',
-                        nome: isAvista
+                        nome: installments <= 1
                           ? (ped?.cliente_nome || 'Cliente')
                           : `${ped?.cliente_nome || 'Cliente'} - Parcela ${p.numero_parcela}`,
-                        badge: isAvista ? 'À vista' : 'Parcelamento',
-                        badgeClass: isAvista ? 'bg-gray-100 text-gray-600' : 'bg-blue-100 text-blue-600',
+                        badge: badge.label,
+                        badgeClass: badge.className,
+                        meta: getPedidoPaymentMeta(ped, p, installments),
                         valor: parseFloat(p.valor) || 0,
                         data: p.data_vencimento,
                       };
@@ -385,6 +441,9 @@ export default function Financeiro() {
                               <Badge variant="secondary" className={`text-xs ${item.badgeClass}`}>
                                 {item.badge}
                               </Badge>
+                              {item.meta && (
+                                <span className="text-xs text-gray-500">{item.meta}</span>
+                              )}
                               {item.data && (
                                 <span className="text-xs text-gray-500">
                                   Vence: {format(parseISO(item.data), 'dd/MM/yyyy')}
@@ -465,7 +524,8 @@ export default function Financeiro() {
                   <h3 className="text-sm font-semibold text-gray-500 mb-2">Recebimentos de Pedidos</h3>
                   {parcelamentosMes.map((parcela) => {
                     const ped = pedidos.find(p => p.id === parcela.pedido_id);
-                    const isAvista = (ped?.parcelas || 1) <= 1;
+                    const installments = getPedidoInstallments(ped);
+                    const badge = getPedidoPaymentBadge(ped, installments);
                     const isPago = parcela.status === 'pago';
                     return (
                       <div
@@ -487,20 +547,18 @@ export default function Financeiro() {
                           </button>
                           <div>
                             <p className={`font-medium ${isPago ? 'line-through text-gray-500' : 'text-gray-900'}`}>
-                              {isAvista
+                              {installments <= 1
                                 ? (ped?.cliente_nome || 'Cliente')
                                 : `${ped?.cliente_nome || 'Cliente'} - Parcela ${parcela.numero_parcela}`}
                             </p>
                             <div className="flex items-center gap-2 text-sm text-gray-500">
                               <Badge
                                 variant="secondary"
-                                className={`text-xs ${isAvista ? 'bg-gray-100 text-gray-600' : 'bg-blue-100 text-blue-600'}`}
+                                className={`text-xs ${badge.className}`}
                               >
-                                {isAvista ? 'À vista' : 'Parcelamento'}
+                                {badge.label}
                               </Badge>
-                              {ped?.forma_pagamento_nome && (
-                                <span>{ped.forma_pagamento_nome}</span>
-                              )}
+                              <span>{getPedidoPaymentMeta(ped, parcela, installments)}</span>
                               {parcela.data_vencimento && (
                                 <span>Vence: {format(parseISO(parcela.data_vencimento), 'dd/MM/yyyy')}</span>
                               )}
