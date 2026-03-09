@@ -46,7 +46,8 @@ const PAGE_TITLE_BY_ROUTE = {
   AjusteUsuario: 'Ajuste de Usuário',
   Suporte: 'Suporte',
   Onboarding: 'Onboarding',
-  AdminPanel: 'Painel Admin'
+  AdminPanel: 'Painel Admin',
+  AdminProspeccao: 'Prospecção'
 };
 
 export default function Layout({ children, currentPageName }) {
@@ -111,7 +112,10 @@ export default function Layout({ children, currentPageName }) {
   }
 
   const navigation = isAdminUser
-    ? [{ name: 'Painel Admin', href: 'AdminPanel', icon: ShieldCheck }]
+    ? [
+      { name: 'Painel Admin', href: 'AdminPanel', icon: ShieldCheck },
+      { name: 'Prospecção', href: 'AdminProspeccao', icon: MessageCircle }
+    ]
     : [
       { name: 'Dashboard', href: 'Dashboard', icon: LayoutDashboard },
       { name: 'Pedidos', href: 'Pedidos', icon: ShoppingBag },

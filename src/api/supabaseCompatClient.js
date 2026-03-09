@@ -160,7 +160,8 @@ const ENTITY_TABLE_MAP = {
   PedidoNotificationRead: 'pedido_notification_reads',
   ParcelamentoPedido: 'parcelamento_pedidos',
   TermsAcceptance: 'terms_acceptances',
-  User: 'profiles'
+  User: 'profiles',
+  ProspeccaoContato: 'prospeccao_contatos'
 };
 
 const toSnake = (value) =>
