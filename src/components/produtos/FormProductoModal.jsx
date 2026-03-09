@@ -85,7 +85,11 @@ export default function FormProductoModal({ open, onOpenChange, editingProduto, 
 
   const toggleComplemento = (index) => {
     setComplementos((prev) =>
-      prev.map((c, i) => (i === index ? { ...c, ativo: !c.ativo } : c))
+      prev.map((c, i) =>
+        i === index
+          ? { ...c, ativo: !c.ativo, valor: !c.ativo && c.valor === '' ? '0' : c.valor }
+          : c
+      )
     );
   };
 
@@ -108,7 +112,8 @@ export default function FormProductoModal({ open, onOpenChange, editingProduto, 
     if (!formData.preco || parseFloat(formData.preco) <= 0) return false;
     for (const c of complementosAtivos) {
       if (!c.nome.trim()) return false;
-      if (c.valor === '' || isNaN(parseFloat(c.valor)) || parseFloat(c.valor) < 0) return false;
+      const val = parseFloat(c.valor);
+      if (!isNaN(val) && val < 0) return false;
     }
     return true;
   };
@@ -117,7 +122,7 @@ export default function FormProductoModal({ open, onOpenChange, editingProduto, 
     if (!isValid()) return;
     const complementosFiltrados = complementosAtivos.map(({ nome, valor }) => ({
       nome,
-      valor: String(valor),
+      valor: String(parseFloat(valor) || 0),
     }));
     onSave({
       ...formData,
