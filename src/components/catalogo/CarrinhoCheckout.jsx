@@ -11,7 +11,8 @@ import {
   CheckCircle,
   Plus,
   Minus,
-  Trash2
+  Trash2,
+  Pencil
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -43,7 +44,7 @@ const fallbackFormasPagamento = [
   { id: '', nome: 'Dinheiro', descricao: '', a_vista: true, parcelamento_max: 1 },
 ].map(normalizeFormaPagamento);
 
-export default function CarrinhoCheckout({ confeitaria, carrinho, onClose, onUpdateQuantidade, onRemoverItem, onLimparCarrinho }) {
+export default function CarrinhoCheckout({ confeitaria, carrinho, onClose, onUpdateQuantidade, onRemoverItem, onLimparCarrinho, onEditarItem }) {
   const { toast } = useToast();
   const [step, setStep] = useState(1);
   const [tipoEntrega, setTipoEntrega] = useState('delivery');
@@ -123,6 +124,10 @@ export default function CarrinhoCheckout({ confeitaria, carrinho, onClose, onUpd
             nome: item.nome,
             preco: item.preco,
             quantidade: item.quantidade,
+            ...(item.complementos_selecionados?.length > 0 && {
+              complementos_selecionados: item.complementos_selecionados,
+              preco_base: item.preco_base,
+            }),
           }))
         }
       });
@@ -263,12 +268,21 @@ export default function CarrinhoCheckout({ confeitaria, carrinho, onClose, onUpd
                           )}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <h4 className="font-semibold text-gray-900 truncate">{item.nome}</h4>
+                          <h4 className="font-semibold text-gray-900 leading-tight">{item.nome}</h4>
                           <p className="text-sm text-gray-500">
-                            R$ {item.preco.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} un.
+                            R$ {(item.preco || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} un.
                           </p>
+                          {item.complementos_selecionados?.length > 0 && (
+                            <div className="mt-1 space-y-0.5">
+                              {item.complementos_selecionados.map((c, i) => (
+                                <p key={i} className="text-xs text-rose-500">
+                                  + {c.nome}
+                                </p>
+                              ))}
+                            </div>
+                          )}
                         </div>
-                        <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-2 shrink-0">
                           <div className="flex items-center border rounded-lg bg-white">
                             <button
                               onClick={() => onUpdateQuantidade(item.id, Math.max(1, item.quantidade - 1))}
@@ -284,6 +298,15 @@ export default function CarrinhoCheckout({ confeitaria, carrinho, onClose, onUpd
                               <Plus className="w-4 h-4" />
                             </button>
                           </div>
+                          {item.complementos_selecionados?.length > 0 && onEditarItem && (
+                            <button
+                              onClick={() => onEditarItem(item)}
+                              className="p-2 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors"
+                              title="Editar complementos"
+                            >
+                              <Pencil className="w-4 h-4" />
+                            </button>
+                          )}
                           <button
                             onClick={() => onRemoverItem(item.id)}
                             className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"

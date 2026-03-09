@@ -24,7 +24,8 @@ import {
   Package,
   Minus,
   ShoppingCart,
-  Truck
+  Truck,
+  Pencil
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -43,6 +44,7 @@ import {
 } from "@/components/ui/dialog";
 import { Link } from 'react-router-dom';
 import { useToast } from '@/components/ui/use-toast';
+import CustomizadorProdutoModal from '@/components/catalogo/CustomizadorProdutoModal';
 
 const stepsPersonalizado = [
   { id: 1, title: 'Cliente', icon: User },
@@ -97,6 +99,9 @@ export default function NovoPedido() {
   const [clienteSearch, setClienteSearch] = useState('');
   const [carrinho, setCarrinho] = useState([]);
   const [produtoSearch, setProdutoSearch] = useState('');
+  const [showCustomizador, setShowCustomizador] = useState(false);
+  const [produtoCustomizando, setProdutoCustomizando] = useState(null);
+  const [editandoItemCarrinho, setEditandoItemCarrinho] = useState(null);
   const [querReservarProdutoPronto, setQuerReservarProdutoPronto] = useState(false);
   const queryClient = useQueryClient();
   const params = new URLSearchParams(window.location.search);
@@ -289,6 +294,10 @@ export default function NovoPedido() {
           nome: item.nome,
           preco: item.preco,
           quantidade: item.quantidade,
+          ...(item.complementos_selecionados?.length > 0 && {
+            complementos_selecionados: item.complementos_selecionados,
+            preco_base: item.preco_base,
+          }),
         })),
       };
     }
@@ -413,8 +422,17 @@ export default function NovoPedido() {
   const shouldShowInstallments = selectedPayment && !selectedPayment.a_vista && selectedPayment.parcelamento_max > 1;
 
   // Carrinho (produto pronto)
-  const subtotalProdutos = carrinho.reduce((acc, item) => acc + (item.preco * item.quantidade), 0);
+  const subtotalProdutos = carrinho.reduce((acc, item) => acc + ((item.preco || 0) * item.quantidade), 0);
   const totalProdutos = subtotalProdutos + (pedido.valor_delivery || 0);
+
+  const handleClickProduto = (produto) => {
+    if (produto.complementos?.length > 0) {
+      setProdutoCustomizando(produto);
+      setShowCustomizador(true);
+    } else {
+      addToCarrinho(produto);
+    }
+  };
 
   const addToCarrinho = (produto) => {
     setCarrinho(prev => {
@@ -424,6 +442,23 @@ export default function NovoPedido() {
       }
       return [...prev, { id: produto.id, nome: produto.nome, preco: produto.preco || 0, quantidade: 1 }];
     });
+  };
+
+  const adicionarComComplementos = (item) => {
+    if (editandoItemCarrinho) {
+      setCarrinho(prev => prev.map(i => i === editandoItemCarrinho ? item : i));
+      setEditandoItemCarrinho(null);
+    } else {
+      setCarrinho(prev => [...prev, item]);
+    }
+  };
+
+  const handleEditarItemCarrinho = (item) => {
+    const produto = produtos.find(p => p.id === item.id);
+    if (!produto) return;
+    setEditandoItemCarrinho(item);
+    setProdutoCustomizando(produto);
+    setShowCustomizador(true);
   };
 
   const updateQuantidade = (produtoId, delta) => {
@@ -931,10 +966,19 @@ export default function NovoPedido() {
               {carrinho.length > 0 && (
                 <div className="p-4 bg-rose-50 rounded-xl space-y-2">
                   <p className="text-sm font-semibold text-gray-700">Carrinho</p>
-                  {carrinho.map((item) => (
-                    <div key={item.id} className="flex items-center justify-between">
-                      <span className="text-sm text-gray-900">{item.nome}</span>
-                      <div className="flex items-center gap-2">
+                  {carrinho.map((item, idx) => (
+                    <div key={idx} className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <span className="text-sm text-gray-900 font-medium">{item.nome}</span>
+                        {item.complementos_selecionados?.length > 0 && (
+                          <div className="space-y-0.5 mt-0.5">
+                            {item.complementos_selecionados.map((c, i) => (
+                              <p key={i} className="text-xs text-rose-500">+ {c.nome}</p>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
                         <Button size="icon" variant="ghost" className="w-7 h-7" onClick={() => updateQuantidade(item.id, -1)}>
                           <Minus className="w-3 h-3" />
                         </Button>
@@ -942,8 +986,13 @@ export default function NovoPedido() {
                         <Button size="icon" variant="ghost" className="w-7 h-7" onClick={() => updateQuantidade(item.id, 1)}>
                           <Plus className="w-3 h-3" />
                         </Button>
-                        <span className="text-sm font-semibold text-rose-600 ml-2">
-                          R$ {(item.preco * item.quantidade).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        {item.complementos_selecionados?.length > 0 && (
+                          <Button size="icon" variant="ghost" className="w-7 h-7 text-rose-500" onClick={() => handleEditarItemCarrinho(item)}>
+                            <Pencil className="w-3 h-3" />
+                          </Button>
+                        )}
+                        <span className="text-sm font-semibold text-rose-600 ml-1 tabular-nums">
+                          R$ {((item.preco || 0) * item.quantidade).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                         </span>
                       </div>
                     </div>
@@ -959,7 +1008,7 @@ export default function NovoPedido() {
                 {filteredProdutos.map((produto) => (
                   <button
                     key={produto.id}
-                    onClick={() => addToCarrinho(produto)}
+                    onClick={() => handleClickProduto(produto)}
                     className="w-full flex items-center justify-between p-4 rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors text-left"
                   >
                     <div className="flex items-center gap-3 min-w-0">
@@ -982,9 +1031,14 @@ export default function NovoPedido() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="font-bold text-rose-600">
-                        R$ {(produto.preco || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                      </span>
+                      <div className="text-right">
+                        <span className="font-bold text-rose-600 block">
+                          R$ {(produto.preco || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        </span>
+                        {produto.complementos?.length > 0 && (
+                          <span className="text-xs text-rose-400">+ complementos</span>
+                        )}
+                      </div>
                       <Plus className="w-4 h-4 text-gray-400" />
                     </div>
                   </button>
@@ -1561,6 +1615,16 @@ export default function NovoPedido() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Modal Customizador de Complementos */}
+      <CustomizadorProdutoModal
+        open={showCustomizador}
+        onOpenChange={(val) => { if (!val) setEditandoItemCarrinho(null); setShowCustomizador(val); }}
+        produto={produtoCustomizando}
+        onAdicionar={adicionarComComplementos}
+        initialSelecionados={editandoItemCarrinho?.complementos_selecionados?.map(c => c.nome) ?? []}
+        initialQuantidade={editandoItemCarrinho?.quantidade ?? 1}
+      />
     </div>
   );
 }

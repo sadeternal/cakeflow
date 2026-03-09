@@ -192,14 +192,29 @@ export default function PedidoDetalhes({ pedido, onClose, onStatusChange }) {
                     const preco = Number(item.preco || 0);
                     const subtotal = quantidade * preco;
 
+                    const complementos = Array.isArray(item.complementos_selecionados)
+                      ? item.complementos_selecionados
+                      : [];
+
                     return (
                       <div key={index} className="border-b border-gray-200 pb-3 last:border-b-0 last:pb-0">
                         <div className="flex items-start justify-between gap-3">
-                          <div>
+                          <div className="flex-1 min-w-0">
                             <p className="font-medium text-gray-900">{item.nome}</p>
-                            <p className="text-sm text-gray-500">{quantidade}x de R$ {preco.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                            <p className="text-sm text-gray-500">
+                              {quantidade}x de R$ {preco.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                            </p>
+                            {complementos.length > 0 && (
+                              <div className="mt-1.5 space-y-0.5">
+                                {complementos.map((c, i) => (
+                                  <p key={i} className="text-xs text-rose-600">
+                                    + {c.nome} (R$ {(parseFloat(c.valor) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })})
+                                  </p>
+                                ))}
+                              </div>
+                            )}
                           </div>
-                          <p className="font-semibold text-gray-900">
+                          <p className="font-semibold text-gray-900 shrink-0">
                             R$ {subtotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                           </p>
                         </div>

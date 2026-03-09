@@ -20,6 +20,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import PedidoPublico from '@/components/catalogo/PedidoPublico';
 import CarrinhoCheckout from '@/components/catalogo/CarrinhoCheckout';
+import CustomizadorProdutoModal from '@/components/catalogo/CustomizadorProdutoModal';
 
 export default function Catalogo() {
   const { slug: routeSlug } = useParams();
@@ -29,6 +30,9 @@ export default function Catalogo() {
   const [showCarrinho, setShowCarrinho] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategoria, setSelectedCategoria] = useState('todas');
+  const [showCustomizador, setShowCustomizador] = useState(false);
+  const [produtoCustomizando, setProdutoCustomizando] = useState(null);
+  const [editandoItemCarrinho, setEditandoItemCarrinho] = useState(null);
 
   useEffect(() => {
     if (routeSlug) {
@@ -106,6 +110,15 @@ export default function Catalogo() {
     window.open(`https://wa.me/55${phone}`, '_blank');
   };
 
+  const handleClickProduto = (produto) => {
+    if (produto.complementos && produto.complementos.length > 0) {
+      setProdutoCustomizando(produto);
+      setShowCustomizador(true);
+    } else {
+      adicionarAoCarrinho(produto);
+    }
+  };
+
   const adicionarAoCarrinho = (produto) => {
     setCarrinho(prev => {
       const itemExistente = prev.find(item => item.id === produto.id);
@@ -120,6 +133,23 @@ export default function Catalogo() {
     });
   };
 
+  const adicionarComComplementos = (item) => {
+    if (editandoItemCarrinho) {
+      setCarrinho(prev => prev.map(i => i === editandoItemCarrinho ? { ...item, quantidade: item.quantidade } : i));
+      setEditandoItemCarrinho(null);
+    } else {
+      setCarrinho(prev => [...prev, item]);
+    }
+  };
+
+  const handleEditarItemCarrinho = (item) => {
+    const produto = produtos.find(p => p.id === item.id);
+    if (!produto) return;
+    setEditandoItemCarrinho(item);
+    setProdutoCustomizando(produto);
+    setShowCustomizador(true);
+  };
+
   const updateQuantidadeCarrinho = (produtoId, quantidade) => {
     setCarrinho(prev =>
       prev.map(item =>
@@ -132,7 +162,7 @@ export default function Catalogo() {
     setCarrinho(prev => prev.filter(item => item.id !== produtoId));
   };
 
-  const totalCarrinho = carrinho.reduce((acc, item) => acc + (item.preco * item.quantidade), 0);
+  const totalCarrinho = carrinho.reduce((acc, item) => acc + ((item.preco || 0) * item.quantidade), 0);
   const quantidadeItens = carrinho.reduce((acc, item) => acc + item.quantidade, 0);
 
   const produtosFiltrados = produtos.filter(p => {
@@ -425,13 +455,13 @@ export default function Catalogo() {
                       </span>
                     </div>
                     <Button
-                      onClick={() => adicionarAoCarrinho(produto)}
+                      onClick={() => handleClickProduto(produto)}
                       style={{ backgroundColor: corPrincipal }}
                       className="hover:opacity-90 w-full"
                       size="sm"
                     >
                       <ShoppingCart className="w-4 h-4 mr-1" />
-                      Adicionar
+                      {produto.complementos?.length > 0 ? 'Personalizar' : 'Adicionar'}
                     </Button>
                   </CardContent>
                 </Card>
@@ -464,6 +494,16 @@ export default function Catalogo() {
         </div>
       </footer>
 
+      {/* Modal Customizador de Produto */}
+      <CustomizadorProdutoModal
+        open={showCustomizador}
+        onOpenChange={(val) => { if (!val) setEditandoItemCarrinho(null); setShowCustomizador(val); }}
+        produto={produtoCustomizando}
+        onAdicionar={adicionarComComplementos}
+        initialSelecionados={editandoItemCarrinho?.complementos_selecionados?.map(c => c.nome) ?? []}
+        initialQuantidade={editandoItemCarrinho?.quantidade ?? 1}
+      />
+
       {/* Modal Pedido Personalizado */}
       {showPedidoForm && (
         <PedidoPublico
@@ -481,6 +521,7 @@ export default function Catalogo() {
           onUpdateQuantidade={updateQuantidadeCarrinho}
           onRemoverItem={removerDoCarrinho}
           onLimparCarrinho={() => setCarrinho([])}
+          onEditarItem={handleEditarItemCarrinho}
         />
       )}
     </div>
