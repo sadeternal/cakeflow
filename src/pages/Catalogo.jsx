@@ -173,6 +173,12 @@ export default function Catalogo() {
 
   const categorias = [...new Set(produtos.map(p => p.categoria))].filter(Boolean);
 
+  const categoriasConfig = Array.isArray(confeitaria?.categorias_produto) ? confeitaria.categorias_produto : [];
+  const getCategoriaLabel = (value) => {
+    const found = categoriasConfig.find(c => c.value === value);
+    return found ? found.label : value.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-rose-50 to-amber-50 flex items-center justify-center">
@@ -415,7 +421,7 @@ export default function Catalogo() {
                       onClick={() => setSelectedCategoria(cat)}
                       style={selectedCategoria === cat ? { backgroundColor: corPrincipal } : {}}
                     >
-                      {cat.charAt(0).toUpperCase() + cat.slice(1)}
+                      {getCategoriaLabel(cat)}
                     </Button>
                   ))}
                 </div>
@@ -440,7 +446,7 @@ export default function Catalogo() {
                     )}
                     {produto.categoria && (
                       <Badge className="absolute top-2 left-2 text-xs" variant="secondary">
-                        {produto.categoria}
+                        {getCategoriaLabel(produto.categoria)}
                       </Badge>
                     )}
                   </div>

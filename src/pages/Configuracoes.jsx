@@ -18,7 +18,8 @@ import {
   ArrowUp,
   ArrowDown,
   Eye,
-  EyeOff
+  EyeOff,
+  Package,
 } from 'lucide-react';
 import AssinaturasTab from '@/components/configuracoes/AssinaturasTab';
 import { useEventTracker } from '@/lib/useEventTracker';
@@ -130,6 +131,14 @@ export default function Configuracoes() {
     habilitar_taxa_urgencia: true,
     taxa_urgencia_percentual: 20,
     taxa_delivery: 0,
+    max_complementos_produto: 4,
+    categorias_produto: [
+      { value: 'bolo', label: 'Bolo' },
+      { value: 'doce', label: 'Doce' },
+      { value: 'salgado', label: 'Salgado' },
+      { value: 'bebida', label: 'Bebida' },
+      { value: 'outro', label: 'Outro' },
+    ],
     receber_pedidos_whatsapp: true,
     exibir_pedido_personalizado: true,
     frase_pedido_personalizado: 'Monte seu Bolo Personalizado',
@@ -138,6 +147,8 @@ export default function Configuracoes() {
     dias_funcionamento: [],
     etapas_pedido: [],
   });
+
+  const [novaCategoria, setNovaCategoria] = useState('');
 
   // Item forms
   const [showItemForm, setShowItemForm] = useState(false);
@@ -171,6 +182,16 @@ export default function Configuracoes() {
           habilitar_taxa_urgencia: conf.habilitar_taxa_urgencia !== false,
           taxa_urgencia_percentual: conf.taxa_urgencia_percentual || 20,
           taxa_delivery: conf.taxa_delivery || 0,
+          max_complementos_produto: conf.max_complementos_produto || 4,
+          categorias_produto: Array.isArray(conf.categorias_produto) && conf.categorias_produto.length > 0
+            ? conf.categorias_produto
+            : [
+              { value: 'bolo', label: 'Bolo' },
+              { value: 'doce', label: 'Doce' },
+              { value: 'salgado', label: 'Salgado' },
+              { value: 'bebida', label: 'Bebida' },
+              { value: 'outro', label: 'Outro' },
+            ],
           receber_pedidos_whatsapp: conf.receber_pedidos_whatsapp !== false,
           exibir_pedido_personalizado: conf.exibir_pedido_personalizado !== false,
           frase_pedido_personalizado: conf.frase_pedido_personalizado || 'Monte seu Bolo Personalizado',
@@ -204,6 +225,8 @@ export default function Configuracoes() {
     habilitar_taxa_urgencia: !!confeitariaForm.habilitar_taxa_urgencia,
     taxa_urgencia_percentual: Number(confeitariaForm.taxa_urgencia_percentual) || 0,
     taxa_delivery: Number(confeitariaForm.taxa_delivery) || 0,
+    max_complementos_produto: Math.min(10, Math.max(1, Number(confeitariaForm.max_complementos_produto) || 4)),
+    categorias_produto: confeitariaForm.categorias_produto,
     receber_pedidos_whatsapp: !!confeitariaForm.receber_pedidos_whatsapp,
     exibir_pedido_personalizado: !!confeitariaForm.exibir_pedido_personalizado,
     frase_pedido_personalizado: confeitariaForm.frase_pedido_personalizado || '',
@@ -528,11 +551,11 @@ export default function Configuracoes() {
             <span className="text-xs font-medium">Catálogo</span>
           </TabsTrigger>
           <TabsTrigger
-            value="pagamentos"
+            value="produtos"
             className="flex flex-col items-center justify-center gap-1 rounded-none border-b-2 border-transparent px-4 py-4 text-gray-600 hover:text-rose-600 data-[state=active]:border-rose-500 data-[state=active]:text-rose-600 data-[state=active]:bg-white transition-all"
           >
-            <CreditCard className="w-5 h-5" />
-            <span className="text-xs font-medium">Pag.</span>
+            <Package className="w-5 h-5" />
+            <span className="text-xs font-medium">Produtos</span>
           </TabsTrigger>
           <TabsTrigger
             value="assinaturas"
@@ -744,24 +767,172 @@ export default function Configuracoes() {
           </Card>
         </TabsContent>
 
-        {/* Formas de Pagamento */}
-        <TabsContent value="pagamentos" className="mt-6">
+        {/* Produtos */}
+        <TabsContent value="produtos" className="mt-6">
           <Card className="border-0 shadow-lg shadow-gray-100/50">
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>Formas de Pagamento</CardTitle>
-              <Button onClick={() => openItemForm('FormaPagamento')} className="bg-rose-500 hover:bg-rose-600">
-                <Plus className="w-4 h-4 mr-2" />
-                Nova Forma
-              </Button>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Package className="w-5 h-5 text-rose-500" />
+                Configurações de Produtos
+              </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-2">
-              {formasPagamento.length === 0 ? (
-                <p className="text-center text-gray-500 py-8">Nenhuma forma de pagamento cadastrada</p>
-              ) : (
-                formasPagamento.map((item) => (
-                  <ItemCard key={item.id} item={item} icon={Store} />
-                ))
-              )}
+            <CardContent>
+              <Tabs defaultValue="ajuste" className="w-full">
+                <TabsList className="grid w-full grid-cols-2 mb-6 bg-rose-50/50 p-1">
+                  <TabsTrigger value="ajuste" className="data-[state=active]:bg-white data-[state=active]:text-rose-600 data-[state=active]:shadow-sm">Ajuste</TabsTrigger>
+                  <TabsTrigger value="categorias" className="data-[state=active]:bg-white data-[state=active]:text-rose-600 data-[state=active]:shadow-sm">Categorias</TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="ajuste" className="space-y-6 mt-0">
+                  <div>
+                    <h4 className="font-semibold text-gray-900 mb-4">Complementos</h4>
+                    <div className="grid md:grid-cols-2 gap-4">
+                      <div>
+                        <Label>Máximo de Complementos por Produto</Label>
+                        <Input
+                          type="number"
+                          min={1}
+                          max={10}
+                          value={confeitariaForm.max_complementos_produto}
+                          onChange={(e) => {
+                            const val = Math.min(10, Math.max(1, parseInt(e.target.value) || 4));
+                            setConfeitariaForm({ ...confeitariaForm, max_complementos_produto: val });
+                          }}
+                        />
+                        <p className="text-xs text-gray-500 mt-1">Padrão: 4 • Máximo: 10</p>
+                      </div>
+                    </div>
+                  </div>
+                  <Button
+                    onClick={() => updateConfeitaria.mutate()}
+                    disabled={updateConfeitaria.isPending || !confeitaria?.id}
+                    className="bg-rose-500 hover:bg-rose-600"
+                  >
+                    <Save className="w-4 h-4 mr-2" />
+                    {updateConfeitaria.isPending ? 'Salvando...' : 'Salvar Alterações'}
+                  </Button>
+                </TabsContent>
+
+                <TabsContent value="categorias" className="space-y-4 mt-0">
+                  <div>
+                    <h4 className="font-semibold text-gray-900 mb-1">Categorias de Produto</h4>
+                    <p className="text-sm text-gray-500 mb-4">
+                      Configure as categorias exibidas ao cadastrar produtos. Mínimo de 1 categoria.
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    {confeitariaForm.categorias_produto.map((cat, index) => (
+                      <div key={cat.value} className="flex items-center gap-2">
+                        <div className="flex flex-col gap-0.5">
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-6 w-6"
+                            disabled={index === 0}
+                            onClick={() => {
+                              const cats = [...confeitariaForm.categorias_produto];
+                              [cats[index - 1], cats[index]] = [cats[index], cats[index - 1]];
+                              setConfeitariaForm({ ...confeitariaForm, categorias_produto: cats });
+                            }}
+                          >
+                            <ArrowUp className="w-3 h-3" />
+                          </Button>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-6 w-6"
+                            disabled={index === confeitariaForm.categorias_produto.length - 1}
+                            onClick={() => {
+                              const cats = [...confeitariaForm.categorias_produto];
+                              [cats[index], cats[index + 1]] = [cats[index + 1], cats[index]];
+                              setConfeitariaForm({ ...confeitariaForm, categorias_produto: cats });
+                            }}
+                          >
+                            <ArrowDown className="w-3 h-3" />
+                          </Button>
+                        </div>
+                        <Input
+                          value={cat.label}
+                          onChange={(e) => {
+                            const cats = [...confeitariaForm.categorias_produto];
+                            cats[index] = { ...cat, label: e.target.value };
+                            setConfeitariaForm({ ...confeitariaForm, categorias_produto: cats });
+                          }}
+                          className="flex-1"
+                          placeholder="Nome da categoria"
+                        />
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="text-red-500 hover:bg-red-50 shrink-0"
+                          disabled={confeitariaForm.categorias_produto.length <= 1}
+                          onClick={() => {
+                            const cats = confeitariaForm.categorias_produto.filter((_, i) => i !== index);
+                            setConfeitariaForm({ ...confeitariaForm, categorias_produto: cats });
+                          }}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="flex gap-2 pt-2 border-t">
+                    <Input
+                      value={novaCategoria}
+                      onChange={(e) => setNovaCategoria(e.target.value)}
+                      placeholder="Nome da nova categoria"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && novaCategoria.trim()) {
+                          const slug = novaCategoria.trim().toLowerCase()
+                            .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+                            .replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+                          const value = slug || `cat_${Date.now()}`;
+                          setConfeitariaForm({
+                            ...confeitariaForm,
+                            categorias_produto: [
+                              ...confeitariaForm.categorias_produto,
+                              { value, label: novaCategoria.trim() },
+                            ],
+                          });
+                          setNovaCategoria('');
+                        }
+                      }}
+                    />
+                    <Button
+                      variant="outline"
+                      disabled={!novaCategoria.trim()}
+                      onClick={() => {
+                        const slug = novaCategoria.trim().toLowerCase()
+                          .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+                          .replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+                        const value = slug || `cat_${Date.now()}`;
+                        setConfeitariaForm({
+                          ...confeitariaForm,
+                          categorias_produto: [
+                            ...confeitariaForm.categorias_produto,
+                            { value, label: novaCategoria.trim() },
+                          ],
+                        });
+                        setNovaCategoria('');
+                      }}
+                    >
+                      <Plus className="w-4 h-4 mr-2" />
+                      Adicionar
+                    </Button>
+                  </div>
+
+                  <Button
+                    onClick={() => updateConfeitaria.mutate()}
+                    disabled={updateConfeitaria.isPending || !confeitaria?.id}
+                    className="bg-rose-500 hover:bg-rose-600"
+                  >
+                    <Save className="w-4 h-4 mr-2" />
+                    {updateConfeitaria.isPending ? 'Salvando...' : 'Salvar Categorias'}
+                  </Button>
+                </TabsContent>
+              </Tabs>
             </CardContent>
           </Card>
         </TabsContent>
@@ -777,9 +948,10 @@ export default function Configuracoes() {
             </CardHeader>
             <CardContent className="space-y-6">
               <Tabs defaultValue="geral" className="w-full">
-                <TabsList className="grid w-full grid-cols-2 mb-6 bg-rose-50/50 p-1">
+                <TabsList className="grid w-full grid-cols-3 mb-6 bg-rose-50/50 p-1">
                   <TabsTrigger value="geral" className="data-[state=active]:bg-white data-[state=active]:text-rose-600 data-[state=active]:shadow-sm">Geral</TabsTrigger>
                   <TabsTrigger value="personalizacao" className="data-[state=active]:bg-white data-[state=active]:text-rose-600 data-[state=active]:shadow-sm">Personalização</TabsTrigger>
+                  <TabsTrigger value="pagamentos" className="data-[state=active]:bg-white data-[state=active]:text-rose-600 data-[state=active]:shadow-sm">Pagamentos</TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="geral" className="space-y-6 mt-0">
@@ -1027,6 +1199,25 @@ export default function Configuracoes() {
                         </div>
                       ))}
                     </div>
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="pagamentos" className="space-y-4 mt-0">
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="font-semibold text-gray-900">Formas de Pagamento</h4>
+                    <Button onClick={() => openItemForm('FormaPagamento')} className="bg-rose-500 hover:bg-rose-600">
+                      <Plus className="w-4 h-4 mr-2" />
+                      Nova Forma
+                    </Button>
+                  </div>
+                  <div className="space-y-2">
+                    {formasPagamento.length === 0 ? (
+                      <p className="text-center text-gray-500 py-8">Nenhuma forma de pagamento cadastrada</p>
+                    ) : (
+                      formasPagamento.map((item) => (
+                        <ItemCard key={item.id} item={item} icon={Store} />
+                      ))
+                    )}
                   </div>
                 </TabsContent>
               </Tabs>

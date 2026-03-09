@@ -26,7 +26,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 
-const categorias = [
+const DEFAULT_CATEGORIAS = [
   { value: 'bolo', label: 'Bolo' },
   { value: 'doce', label: 'Doce' },
   { value: 'salgado', label: 'Salgado' },
@@ -50,11 +50,11 @@ const FORM_INICIAL = {
   disponivel: true,
 };
 
-export default function FormProductoModal({ open, onOpenChange, editingProduto, onSave, isSaving }) {
+export default function FormProductoModal({ open, onOpenChange, editingProduto, onSave, isSaving, maxComplementos = 4, categorias = DEFAULT_CATEGORIAS }) {
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState('dados');
   const [formData, setFormData] = useState(FORM_INICIAL);
-  const [complementos, setComplementos] = useState(COMPLEMENTOS_VAZIOS.map((c) => ({ ...c })));
+  const [complementos, setComplementos] = useState([]);
 
   useEffect(() => {
     if (!open) return;
@@ -70,14 +70,14 @@ export default function FormProductoModal({ open, onOpenChange, editingProduto, 
       });
 
       const saved = Array.isArray(editingProduto.complementos) ? editingProduto.complementos : [];
-      const slots = COMPLEMENTOS_VAZIOS.map((s) => ({ ...s }));
-      saved.slice(0, 4).forEach((c, i) => {
+      const slots = Array.from({ length: maxComplementos }, () => ({ nome: '', valor: '', ativo: false }));
+      saved.slice(0, maxComplementos).forEach((c, i) => {
         slots[i] = { nome: c.nome || '', valor: String(c.valor ?? ''), ativo: true };
       });
       setComplementos(slots);
     } else {
       setFormData(FORM_INICIAL);
-      setComplementos(COMPLEMENTOS_VAZIOS.map((c) => ({ ...c })));
+      setComplementos(Array.from({ length: maxComplementos }, () => ({ nome: '', valor: '', ativo: false })));
     }
 
     setActiveTab('dados');
@@ -282,7 +282,7 @@ export default function FormProductoModal({ open, onOpenChange, editingProduto, 
           <TabsContent value="complementos" className="space-y-4 pt-4">
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
               <p className="text-sm text-blue-900">
-                Adicione até 4 complementos opcionais. Clientes poderão escolher quais desejam ao adicionar ao carrinho.
+                Adicione até {maxComplementos} complementos opcionais. Clientes poderão escolher quais desejam ao adicionar ao carrinho.
               </p>
             </div>
 
@@ -349,7 +349,7 @@ export default function FormProductoModal({ open, onOpenChange, editingProduto, 
             <p className="text-sm text-center">
               {complementosAtivos.length > 0 ? (
                 <span className="text-rose-600 font-medium">
-                  ✅ {complementosAtivos.length} complemento(s) habilitado(s) de 4
+                  ✅ {complementosAtivos.length} complemento(s) habilitado(s) de {maxComplementos}
                 </span>
               ) : (
                 <span className="text-gray-400">Nenhum complemento habilitado</span>

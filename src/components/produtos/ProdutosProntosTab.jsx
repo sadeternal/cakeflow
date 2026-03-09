@@ -25,7 +25,7 @@ import {
 } from '@/components/ui/dialog';
 import FormProductoModal from '@/components/produtos/FormProductoModal';
 
-const categorias = [
+const DEFAULT_CATEGORIAS = [
   { value: 'bolo', label: 'Bolo' },
   { value: 'doce', label: 'Doce' },
   { value: 'salgado', label: 'Salgado' },
@@ -41,6 +41,20 @@ export default function ProdutosProntosTab({ user }) {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [produtoToDelete, setProdutoToDelete] = useState(null);
   const queryClient = useQueryClient();
+
+  const { data: confeitaria } = useQuery({
+    queryKey: ['confeitaria', user?.confeitaria_id],
+    queryFn: async () => {
+      const list = await appClient.entities.Confeitaria.filter({ id: user.confeitaria_id });
+      return list[0] || null;
+    },
+    enabled: !!user?.confeitaria_id,
+  });
+
+  const maxComplementos = Math.min(10, Math.max(1, confeitaria?.max_complementos_produto || 4));
+  const categorias = Array.isArray(confeitaria?.categorias_produto) && confeitaria.categorias_produto.length > 0
+    ? confeitaria.categorias_produto
+    : DEFAULT_CATEGORIAS;
 
   const { data: produtos = [], isLoading } = useQuery({
     queryKey: ['produtos', user?.confeitaria_id],
@@ -143,78 +157,137 @@ export default function ProdutosProntosTab({ user }) {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <div className="flex flex-col gap-2">
+          {/* Cabeçalho — apenas desktop */}
+          <div className="hidden md:grid grid-cols-[3rem_1fr_8rem_7rem_6rem_5rem] gap-4 items-center px-4 py-2 text-xs font-semibold text-gray-400 uppercase tracking-wide border-b">
+            <span></span>
+            <span>Produto</span>
+            <span>Preço</span>
+            <span>Categoria</span>
+            <span>Disponível</span>
+            <span className="text-right">Ações</span>
+          </div>
+
           {filteredProdutos.map((produto) => (
             <Card
               key={produto.id}
-              className={`border-0 shadow-lg shadow-gray-100/50 overflow-hidden transition-opacity ${
+              className={`border-0 shadow-sm shadow-gray-100/50 transition-opacity ${
                 !produto.disponivel ? 'opacity-60' : ''
               }`}
             >
-              <div className="aspect-square relative bg-gray-100">
-                {produto.foto_url ? (
-                  <img
-                    src={produto.foto_url}
-                    alt={produto.nome}
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center">
-                    <ImageIcon className="w-12 h-12 text-gray-300" />
+              <CardContent className="p-0">
+                {/* Layout desktop: linha */}
+                <div className="hidden md:grid grid-cols-[3rem_1fr_8rem_7rem_6rem_5rem] gap-4 items-center px-4 py-3">
+                  {/* Foto */}
+                  <div className="w-12 h-12 rounded-lg overflow-hidden bg-gray-100 shrink-0">
+                    {produto.foto_url ? (
+                      <img src={produto.foto_url} alt={produto.nome} className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <ImageIcon className="w-5 h-5 text-gray-300" />
+                      </div>
+                    )}
                   </div>
-                )}
-                {!produto.disponivel && (
-                  <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-                    <Badge variant="secondary" className="bg-white/90">
-                      Indisponível
-                    </Badge>
+
+                  {/* Nome + descrição + badges */}
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-semibold text-gray-900 text-sm">{produto.nome}</span>
+                      {produto.complementos?.length > 0 && (
+                        <Badge className="bg-rose-100 text-rose-600 border-0 gap-1 text-xs px-1.5 py-0">
+                          <Puzzle className="w-3 h-3" />
+                          {produto.complementos.length} compl.
+                        </Badge>
+                      )}
+                    </div>
+                    {produto.descricao && (
+                      <p className="text-xs text-gray-400 truncate mt-0.5">{produto.descricao}</p>
+                    )}
                   </div>
-                )}
-                <Badge className="absolute top-3 left-3 bg-white/90 text-gray-700">
-                  {categorias.find((c) => c.value === produto.categoria)?.label}
-                </Badge>
-                {produto.complementos?.length > 0 && (
-                  <Badge className="absolute top-3 right-3 bg-rose-500 text-white gap-1">
-                    <Puzzle className="w-3 h-3" />
-                    {produto.complementos.length}
-                  </Badge>
-                )}
-              </div>
-              <CardContent className="p-4">
-                <h3 className="font-semibold text-gray-900 mb-1">{produto.nome}</h3>
-                {produto.descricao && (
-                  <p className="text-sm text-gray-500 line-clamp-2 mb-3">{produto.descricao}</p>
-                )}
-                <div className="flex items-center justify-between">
-                  <span className="text-lg font-bold text-rose-600">
-                    R${' '}
-                    {produto.preco?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+
+                  {/* Preço */}
+                  <span className="font-bold text-rose-600 text-sm">
+                    R$ {produto.preco?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                   </span>
-                  <div className="flex gap-1">
-                    <Button size="icon" variant="ghost" onClick={() => openForm(produto)}>
-                      <Pencil className="w-4 h-4" />
-                    </Button>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="text-red-600 hover:bg-red-50"
-                      onClick={() => {
-                        setProdutoToDelete(produto);
-                        setShowDeleteDialog(true);
-                      }}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </div>
-                </div>
-                <div className="mt-3 pt-3 border-t flex items-center justify-between">
-                  <span className="text-sm text-gray-500">Disponível</span>
+
+                  {/* Categoria */}
+                  <span className="text-sm text-gray-500">
+                    {categorias.find((c) => c.value === produto.categoria)?.label || '—'}
+                  </span>
+
+                  {/* Disponível */}
                   <Switch
                     checked={produto.disponivel !== false}
                     onCheckedChange={(checked) =>
                       toggleDisponivel.mutate({ id: produto.id, disponivel: checked })
                     }
                   />
+
+                  {/* Ações */}
+                  <div className="flex gap-1 justify-end">
+                    <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => openForm(produto)}>
+                      <Pencil className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-8 w-8 text-red-500 hover:bg-red-50"
+                      onClick={() => { setProdutoToDelete(produto); setShowDeleteDialog(true); }}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Layout mobile: card compacto */}
+                <div className="flex md:hidden items-center gap-3 p-3">
+                  <div className="w-14 h-14 rounded-lg overflow-hidden bg-gray-100 shrink-0">
+                    {produto.foto_url ? (
+                      <img src={produto.foto_url} alt={produto.nome} className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <ImageIcon className="w-6 h-6 text-gray-300" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="font-semibold text-gray-900 text-sm">{produto.nome}</span>
+                      {produto.complementos?.length > 0 && (
+                        <Badge className="bg-rose-100 text-rose-600 border-0 gap-1 text-xs px-1.5 py-0">
+                          <Puzzle className="w-3 h-3" />
+                          {produto.complementos.length}
+                        </Badge>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className="text-sm font-bold text-rose-600">
+                        R$ {produto.preco?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      </span>
+                      <span className="text-xs text-gray-400">
+                        {categorias.find((c) => c.value === produto.categoria)?.label}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <Switch
+                      checked={produto.disponivel !== false}
+                      onCheckedChange={(checked) =>
+                        toggleDisponivel.mutate({ id: produto.id, disponivel: checked })
+                      }
+                    />
+                    <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => openForm(produto)}>
+                      <Pencil className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-8 w-8 text-red-500 hover:bg-red-50"
+                      onClick={() => { setProdutoToDelete(produto); setShowDeleteDialog(true); }}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -229,6 +302,8 @@ export default function ProdutosProntosTab({ user }) {
         editingProduto={editingProduto}
         onSave={(data) => saveMutation.mutate(data)}
         isSaving={saveMutation.isPending}
+        maxComplementos={maxComplementos}
+        categorias={categorias}
       />
 
       {/* Delete Dialog */}
