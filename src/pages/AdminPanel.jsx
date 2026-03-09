@@ -60,7 +60,8 @@ import {
   Flame,
   UserCheck,
   UserX,
-  Filter
+  Filter,
+  MessageCircle
 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import 'react-quill/dist/quill.snow.css';
@@ -590,15 +591,15 @@ export default function AdminPanel() {
                               }
                             </button>
                             <button
-                              onClick={() => handleAddBrevo(c)}
-                              disabled={enviandoBrevo[c.id]}
-                              title="Adicionar ao Brevo"
-                              className="p-1.5 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors disabled:opacity-50"
+                              onClick={() => {
+                                const phone = c.telefone?.replace(/\D/g, '');
+                                if (phone) window.open(`https://wa.me/55${phone}`, '_blank');
+                              }}
+                              disabled={!c.telefone}
+                              title={c.telefone ? 'Abrir WhatsApp' : 'Sem telefone'}
+                              className="p-1.5 rounded-lg text-gray-400 hover:text-green-600 hover:bg-green-50 transition-colors disabled:opacity-40"
                             >
-                              {enviandoBrevo[c.id]
-                                ? <Loader2 className="w-4 h-4 animate-spin" />
-                                : <Mail className="w-4 h-4" />
-                              }
+                              <MessageCircle className="w-4 h-4" />
                             </button>
                             <button
                               onClick={() => handleOpenHistory(c)}
