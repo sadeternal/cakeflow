@@ -20,7 +20,7 @@ import {
 import {
   MessageCircle, Check, Undo2, Search, RefreshCw, Send, Instagram, Phone,
   MapPin, Users, CheckCircle2, Clock, PhoneOff, Upload, Download, AlertCircle,
-  Plus, Loader2, Trash2
+  Plus, Loader2, Trash2, Mail
 } from 'lucide-react';
 
 const STORAGE_MSG_KEY = 'cakeflow_prospeccao_mensagem';
@@ -49,45 +49,91 @@ const COLUMN_ALIASES = {
   cidade:    ['cidade', 'city', 'localidade', 'local'],
   telefone:  ['telefone', 'phone', 'tel', 'celular', 'whatsapp', 'fone'],
   instagram: ['instagram', 'ig', 'insta', 'perfil'],
+  email:     ['email', 'e-mail', 'mail', 'emaill'],
 };
 
-function detectSeparator(line) {
-  const semicolons = (line.match(/;/g) || []).length;
-  const commas = (line.match(/,/g) || []).length;
-  return semicolons >= commas ? ';' : ',';
-}
-
-function unquote(val) {
-  if (!val) return '';
-  const v = val.trim();
-  if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
-    return v.slice(1, -1).trim();
-  }
-  return v;
-}
-
 function mapHeader(header) {
-  const h = header.toLowerCase().trim();
+  const h = header.toLowerCase().trim().replace(/[^a-z0-9]/g, '');
   for (const [field, aliases] of Object.entries(COLUMN_ALIASES)) {
-    if (aliases.some(a => h.includes(a))) return field;
+    if (aliases.some(a => h.includes(a.replace(/[^a-z0-9]/g, '')))) return field;
   }
   return null;
 }
 
+// RFC 4180 compliant parser — handles quoted fields with commas, newlines, double-quotes
+function parseCSVLine(line, sep) {
+  const cells = [];
+  let i = 0;
+  while (i <= line.length) {
+    if (line[i] === '"') {
+      i++;
+      let val = '';
+      while (i < line.length) {
+        if (line[i] === '"' && line[i + 1] === '"') { val += '"'; i += 2; }
+        else if (line[i] === '"') { i++; break; }
+        else { val += line[i++]; }
+      }
+      cells.push(val.trim());
+      if (line[i] === sep) i++;
+    } else {
+      let val = '';
+      while (i < line.length && line[i] !== sep) val += line[i++];
+      cells.push(val.trim());
+      if (line[i] === sep) i++;
+    }
+  }
+  return cells;
+}
+
+function detectSeparator(line) {
+  // Count unquoted semicolons vs commas
+  let commas = 0, semis = 0, inQ = false;
+  for (const c of line) {
+    if (c === '"') inQ = !inQ;
+    else if (!inQ && c === ',') commas++;
+    else if (!inQ && c === ';') semis++;
+  }
+  return semis >= commas ? ';' : ',';
+}
+
+function normalizeInstagram(val) {
+  if (!val) return '';
+  const urlMatch = val.match(/instagram\.com\/([^/?&#\s]+)/i);
+  if (urlMatch) return '@' + urlMatch[1];
+  if (val.startsWith('@')) return val;
+  return val.includes('.') || val.includes(' ') ? '' : '@' + val;
+}
+
+function normalizePhone(val) {
+  return val ? val.replace(/\D/g, '') : '';
+}
+
 function parseCSV(text) {
-  const lines = text.split(/\r?\n/).filter(l => l.trim());
+  // Strip UTF-8 BOM
+  const clean = text.replace(/^\uFEFF/, '').replace(/^\ï»¿/, '');
+  const lines = clean.split(/\r?\n/).filter(l => l.trim());
   if (lines.length < 2) throw new Error('O arquivo está vazio ou tem apenas o cabeçalho.');
+
   const sep = detectSeparator(lines[0]);
-  const headers = lines[0].split(sep).map(h => unquote(h));
+  const headers = parseCSVLine(lines[0], sep);
   const fieldMap = headers.map(mapHeader);
+
   if (!fieldMap.includes('nome')) throw new Error('Coluna "nome" não encontrada. Verifique o cabeçalho do CSV.');
+
   const rows = [];
   for (let i = 1; i < lines.length; i++) {
-    const cells = lines[i].split(sep).map(unquote);
-    const row = { nome: '', cidade: '', telefone: '', instagram: '' };
-    fieldMap.forEach((field, idx) => { if (field) row[field] = cells[idx] || ''; });
-    if (row.nome) rows.push(row);
+    const cells = parseCSVLine(lines[i], sep);
+    const row = { nome: '', cidade: '', telefone: '', instagram: '', email: '' };
+    fieldMap.forEach((field, idx) => {
+      if (field) row[field] = cells[idx] || '';
+    });
+    if (!row.nome) continue;
+    // Normalize fields
+    row.instagram = normalizeInstagram(row.instagram);
+    row.telefone  = normalizePhone(row.telefone);
+    rows.push(row);
   }
+
   if (rows.length === 0) throw new Error('Nenhuma linha válida encontrada no arquivo.');
   return rows;
 }
@@ -101,7 +147,7 @@ function buildWhatsAppUrl(phone, name, message) {
 }
 
 function downloadModelo() {
-  const content = 'nome;cidade;telefone;instagram\nConfeitaria Exemplo;São Paulo - SP;11999990000;@exemplo.confeitaria\n';
+  const content = 'nome;cidade;email;instagram;telefone\nConfeitaria Exemplo;São Paulo, SP;contato@exemplo.com;@exemplo.confeitaria;11999990000\n';
   const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -110,7 +156,7 @@ function downloadModelo() {
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
-const EMPTY_FORM = { nome: '', cidade: '', telefone: '', instagram: '' };
+const EMPTY_FORM = { nome: '', cidade: '', telefone: '', instagram: '', email: '' };
 const QK = ['prospeccao_contatos'];
 
 export default function AdminProspeccao() {
@@ -188,7 +234,7 @@ export default function AdminProspeccao() {
   const handleAddNew = () => {
     if (!newForm.nome.trim()) { setNewFormError('O nome é obrigatório.'); return; }
     createMut.mutate(
-      { nome: newForm.nome.trim(), cidade: newForm.cidade.trim(), telefone: newForm.telefone.trim(), instagram: newForm.instagram.trim() },
+      { nome: newForm.nome.trim(), cidade: newForm.cidade.trim(), telefone: newForm.telefone.trim(), instagram: newForm.instagram.trim(), email: newForm.email.trim() },
       { onSuccess: () => { setNewForm(EMPTY_FORM); setNewFormError(''); setShowNewDialog(false); } }
     );
   };
@@ -214,7 +260,7 @@ export default function AdminProspeccao() {
     }
     await Promise.all(
       importPreview.rows.map(r => appClient.entities.ProspeccaoContato.create({
-        nome: r.nome, cidade: r.cidade || '', telefone: r.telefone || '', instagram: r.instagram || '',
+        nome: r.nome, cidade: r.cidade || '', telefone: r.telefone || '', instagram: r.instagram || '', email: r.email || '',
       }))
     );
     invalidate();
@@ -387,7 +433,14 @@ export default function AdminProspeccao() {
                       const waUrl = hasPhone ? buildWhatsAppUrl(contato.telefone, contato.nome, message) : null;
                       return (
                         <TableRow key={contato.id} className={isSent ? 'bg-green-50' : ''}>
-                          <TableCell className="font-medium">{contato.nome}</TableCell>
+                          <TableCell>
+                            <p className="font-medium">{contato.nome}</p>
+                            {contato.email && (
+                              <p className="text-xs text-gray-400 flex items-center gap-1 mt-0.5">
+                                <Mail className="h-3 w-3" />{contato.email}
+                              </p>
+                            )}
+                          </TableCell>
                           <TableCell>
                             {contato.cidade
                               ? <span className="flex items-center gap-1 text-gray-600"><MapPin className="h-3 w-3" />{contato.cidade}</span>
@@ -457,6 +510,7 @@ export default function AdminProspeccao() {
                         <div className="flex items-start justify-between gap-2">
                           <div>
                             <p className="font-medium text-gray-900">{contato.nome}</p>
+                            {contato.email && <p className="text-xs text-gray-400 flex items-center gap-1 mt-0.5"><Mail className="h-3 w-3" />{contato.email}</p>}
                             {contato.cidade && <p className="text-sm text-gray-500 flex items-center gap-1 mt-0.5"><MapPin className="h-3 w-3" />{contato.cidade}</p>}
                           </div>
                           {isSent
@@ -528,6 +582,11 @@ export default function AdminProspeccao() {
               <Label htmlFor="new-instagram">Instagram</Label>
               <Input id="new-instagram" placeholder="Ex: @docemel.confeitaria" value={newForm.instagram}
                 onChange={e => setNewForm(p => ({ ...p, instagram: e.target.value }))} />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="new-email">E-mail</Label>
+              <Input id="new-email" type="email" placeholder="Ex: contato@confeitaria.com.br" value={newForm.email}
+                onChange={e => setNewForm(p => ({ ...p, email: e.target.value }))} />
             </div>
           </div>
           <DialogFooter>
