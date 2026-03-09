@@ -20,7 +20,7 @@ import {
 import {
   MessageCircle, Check, Undo2, Search, RefreshCw, Send, Instagram, Phone,
   MapPin, Users, CheckCircle2, Clock, PhoneOff, Upload, Download, AlertCircle,
-  Plus, Loader2
+  Plus, Loader2, Trash2
 } from 'lucide-react';
 
 const STORAGE_MSG_KEY = 'cakeflow_prospeccao_mensagem';
@@ -430,6 +430,9 @@ export default function AdminProspeccao() {
                                 : hasPhone
                                   ? <Button size="sm" variant="ghost" onClick={() => markSent(contato)} className="gap-1 h-8 text-gray-500" title="Marcar como enviado"><Check className="h-3 w-3" /></Button>
                                   : null}
+                              <Button size="sm" variant="ghost" onClick={() => deleteMut.mutate(contato.id)} className="h-8 text-red-400 hover:text-red-600 hover:bg-red-50" title="Apagar contato">
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
                             </div>
                           </TableCell>
                         </TableRow>
@@ -486,6 +489,9 @@ export default function AdminProspeccao() {
                             : hasPhone
                               ? <Button size="sm" variant="outline" onClick={() => markSent(contato)} className="gap-1"><Check className="h-3 w-3" />Marcar</Button>
                               : null}
+                          <Button size="sm" variant="outline" onClick={() => deleteMut.mutate(contato.id)} className="text-red-400 hover:text-red-600 border-red-200 hover:bg-red-50">
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
                         </div>
                       </div>
                     );
