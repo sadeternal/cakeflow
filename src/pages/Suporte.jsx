@@ -10,6 +10,26 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { MessageCircle, Send, BookOpen, Video } from 'lucide-react';
 import { toast } from 'sonner';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+
+const ASSUNTOS = [
+  'Dúvidas sobre o sistema',
+  'Problemas técnicos / Bugs',
+  'Relatórios e análises',
+  'Faturamento e pagamentos',
+  'Cancelamento',
+  'Melhorias e novidades',
+  'Integração com outras plataformas',
+  'Segurança e privacidade',
+  'Treinamento/Onboarding',
+  'Feedback geral',
+];
 
 export default function Suporte() {
   const primeirosPassosUrl = 'https://www.youtube.com/watch?v=L7PpgxdsZEc';
@@ -17,6 +37,7 @@ export default function Suporte() {
   const [formData, setFormData] = useState({
     nome: '',
     confeitaria: '',
+    assunto: '',
     mensagem: ''
   });
 
@@ -58,7 +79,7 @@ export default function Suporte() {
   const handleSubmit = (e) => {
     e.preventDefault();
 
-    if (!formData.nome || !formData.confeitaria || !formData.mensagem) {
+    if (!formData.nome || !formData.confeitaria || !formData.assunto || !formData.mensagem) {
       toast.error('Preencha todos os campos');
       return;
     }
@@ -66,16 +87,18 @@ export default function Suporte() {
     const numeroSuporte = '5575999501988';
     const mensagemWhatsApp = `*Solicitação de Suporte - CakeFlow*\n\n` +
       `*Nome:* ${formData.nome}\n` +
-      `*Confeitaria:* ${formData.confeitaria}\n\n` +
+      `*Confeitaria:* ${formData.confeitaria}\n` +
+      `*Assunto:* ${formData.assunto}\n\n` +
       `*Mensagem:*\n${formData.mensagem}`;
 
     const url = `https://wa.me/${numeroSuporte}?text=${encodeURIComponent(mensagemWhatsApp)}`;
     
     window.open(url, '_blank');
     
-    // Limpar apenas a mensagem
+    // Limpar assunto e mensagem após envio
     setFormData(prev => ({
       ...prev,
+      assunto: '',
       mensagem: ''
     }));
     
@@ -136,6 +159,25 @@ export default function Suporte() {
                     onChange={(e) => setFormData({ ...formData, confeitaria: e.target.value })}
                     required
                   />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Assunto</Label>
+                  <Select
+                    value={formData.assunto}
+                    onValueChange={(value) => setFormData({ ...formData, assunto: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione o assunto..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {ASSUNTOS.map((assunto) => (
+                        <SelectItem key={assunto} value={assunto}>
+                          {assunto}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 <div className="space-y-2">
