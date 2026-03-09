@@ -1,867 +1,725 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { appClient } from '@/api/appClient';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { createPageUrl } from '@/utils';
 import { useAuth } from '@/lib/AuthContext';
 import { format, parseISO, startOfMonth, endOfMonth, isWithinInterval, addMonths } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 import {
-  TrendingUp,
-  TrendingDown,
-  DollarSign,
-  Plus,
-  ArrowUpCircle,
-  ArrowDownCircle,
-  Check,
-  Trash2
+  TrendingUp, TrendingDown, DollarSign, Plus, Check, Trash2,
+  ArrowUpCircle, ArrowDownCircle, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Card, CardContent } from '@/components/ui/card';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from '@/components/ui/dialog';
+import { toast } from 'sonner';
 
-const categoriasPagar = [
+// ─── Constantes ───────────────────────────────────────────────────────────────
+
+const MESES = [
+  { value: 1,  label: 'Janeiro' },
+  { value: 2,  label: 'Fevereiro' },
+  { value: 3,  label: 'Março' },
+  { value: 4,  label: 'Abril' },
+  { value: 5,  label: 'Maio' },
+  { value: 6,  label: 'Junho' },
+  { value: 7,  label: 'Julho' },
+  { value: 8,  label: 'Agosto' },
+  { value: 9,  label: 'Setembro' },
+  { value: 10, label: 'Outubro' },
+  { value: 11, label: 'Novembro' },
+  { value: 12, label: 'Dezembro' },
+];
+
+const categoriasDespesa = [
   { value: 'ingredientes', label: 'Ingredientes' },
-  { value: 'embalagens', label: 'Embalagens' },
-  { value: 'entregas', label: 'Entregas' },
+  { value: 'embalagens',   label: 'Embalagens' },
+  { value: 'entregas',     label: 'Entregas' },
   { value: 'equipamentos', label: 'Equipamentos' },
-  { value: 'aluguel', label: 'Aluguel' },
-  { value: 'outros', label: 'Outros' },
+  { value: 'aluguel',      label: 'Aluguel' },
+  { value: 'outros',       label: 'Outros' },
 ];
 
-const tiposReceber = [
-  { value: 'sinal', label: 'Sinal' },
-  { value: 'pagamento_final', label: 'Pagamento Final' },
-  { value: 'outro', label: 'Outro' },
+const tiposReceita = [
+  { value: 'sinal',            label: 'Sinal' },
+  { value: 'pagamento_final',  label: 'Pagamento Final' },
+  { value: 'outro',            label: 'Outro' },
 ];
 
-const normalizePaymentName = (value = '') =>
-  String(value)
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase();
+const todayStr = () => format(new Date(), 'yyyy-MM-dd');
 
-const isPixPayment = (value = '') => normalizePaymentName(value).includes('pix');
+const makeEmptyForm = () => ({
+  tipo: 'receita',
+  cliente_nome: '',
+  descricao: '',
+  tipo_receita: 'pagamento_final',
+  fornecedor: '',
+  categoria: 'ingredientes',
+  valor: '',
+  data_vencimento: todayStr(),
+});
 
-const getPedidoPaymentName = (pedido = null) =>
-  pedido?.forma_pagamento_nome || pedido?.forma_pagamento || 'Não definido';
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const getPedidoPaymentBadge = (pedido = null, installments = 1) => {
-  const paymentName = getPedidoPaymentName(pedido);
+const fmt     = (v) => Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+const fmtDate = (d) => { try { return format(parseISO(d), 'dd/MM/yyyy'); } catch { return '—'; } };
 
+const normalizePaymentName = (v = '') => String(v).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+const isPixPayment         = (v = '') => normalizePaymentName(v).includes('pix');
+const getPedidoPaymentName = (p)      => p?.forma_pagamento_nome || p?.forma_pagamento || 'Não definido';
+
+const getPedidoPaymentMeta = (ped, parcela, installments) => {
+  const name = getPedidoPaymentName(ped);
   if (installments > 1) {
-    return {
-      label: `${installments}x`,
-      className: 'bg-blue-100 text-blue-600',
-    };
+    const val = parseFloat(parcela?.valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+    return `${name} • ${installments}x de R$ ${val}`;
   }
-
-  return {
-    label: 'À vista',
-    className: isPixPayment(paymentName) ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-600',
-  };
+  return isPixPayment(name) ? 'Pix • À vista' : `${name} • À vista`;
 };
 
-const getPedidoPaymentMeta = (pedido = null, parcela = null, installments = 1) => {
-  const paymentName = getPedidoPaymentName(pedido);
-  const installmentValue = Number(parcela?.valor || 0);
-
-  if (installments > 1) {
-    return `${paymentName} • ${installments}x de R$ ${installmentValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
-  }
-
-  if (isPixPayment(paymentName)) {
-    return 'Pix • À vista';
-  }
-
-  return `${paymentName} • À vista`;
+const inMonth = (dateStr, inicio, fim) => {
+  if (!dateStr) return false;
+  try { return isWithinInterval(parseISO(dateStr), { start: inicio, end: fim }); } catch { return false; }
 };
 
-const formatRecebimentoTitle = (conta) => {
-  const numeroPedido = conta.pedido_numero ? `Pedido #${conta.pedido_numero}` : null;
-  return numeroPedido || conta.cliente_nome || conta.descricao;
-};
-
-const formatRecebimentoMeta = (conta) => {
-  const detalhes = [];
-  if (conta.pedido_numero && conta.cliente_nome) detalhes.push(conta.cliente_nome);
-  if (conta.forma_pagamento) detalhes.push(conta.forma_pagamento);
-  if (conta.parcelas_total > 1) detalhes.push(`Parcela ${conta.parcela_atual}/${conta.parcelas_total}`);
-  return detalhes.join(' • ');
-};
+// ─── Component ────────────────────────────────────────────────────────────────
 
 export default function Financeiro() {
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState('visao');
-  const [showContaPagarForm, setShowContaPagarForm] = useState(false);
-  const [showContaReceberForm, setShowContaReceberForm] = useState(false);
-  const [mesAtual, setMesAtual] = useState(format(new Date(), 'yyyy-MM'));
   const queryClient = useQueryClient();
 
-  const [contaPagarForm, setContaPagarForm] = useState({
-    descricao: '',
-    fornecedor: '',
-    valor: '',
-    data_vencimento: '',
-    categoria: 'ingredientes',
-  });
+  const today = new Date();
+  const [mesSel, setMesSel] = useState(today.getMonth() + 1); // 1–12
+  const [anoSel, setAnoSel] = useState(today.getFullYear());
 
-  const [contaReceberForm, setContaReceberForm] = useState({
-    cliente_nome: '',
-    descricao: '',
-    valor: '',
-    data_vencimento: '',
-    tipo: 'pagamento_final',
-  });
+  const [filtroTipo,   setFiltroTipo]   = useState('todos');
+  const [filtroStatus, setFiltroStatus] = useState('todos');
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm]         = useState(makeEmptyForm);
+  const [clienteManual, setClienteManual] = useState(false);
 
   useEffect(() => {
-    if (user && !user.confeitaria_id) {
-      window.location.href = createPageUrl('Onboarding');
-    }
+    if (user && !user.confeitaria_id) window.location.href = createPageUrl('Onboarding');
   }, [user]);
 
+  // Navegar por mês com as setas
+  const navegarMes = (delta) => {
+    const base = new Date(anoSel, mesSel - 1, 1);
+    const next = addMonths(base, delta);
+    setMesSel(next.getMonth() + 1);
+    setAnoSel(next.getFullYear());
+  };
+
+  // Anos disponíveis no seletor
+  const anosDisponiveis = useMemo(() => {
+    const y = today.getFullYear();
+    return [y - 2, y - 1, y, y + 1, y + 2];
+  }, []);
+
+  // Intervalo do mês
+  const mesSelecionado = useMemo(() => new Date(anoSel, mesSel - 1, 1), [anoSel, mesSel]);
+  const inicioMes      = useMemo(() => startOfMonth(mesSelecionado), [mesSelecionado]);
+  const fimMes         = useMemo(() => endOfMonth(mesSelecionado),   [mesSelecionado]);
+
+  // ── Queries ──
   const { data: contasReceber = [] } = useQuery({
     queryKey: ['contasReceber', user?.confeitaria_id],
-    queryFn: () => appClient.entities.ContaReceber.filter({ confeitaria_id: user.confeitaria_id }, '-data_vencimento'),
-    enabled: !!user?.confeitaria_id,
+    queryFn:  () => appClient.entities.ContaReceber.filter({ confeitaria_id: user.confeitaria_id }, '-data_vencimento'),
+    enabled:  !!user?.confeitaria_id,
   });
-
   const { data: contasPagar = [] } = useQuery({
     queryKey: ['contasPagar', user?.confeitaria_id],
-    queryFn: () => appClient.entities.ContaPagar.filter({ confeitaria_id: user.confeitaria_id }, '-data_vencimento'),
-    enabled: !!user?.confeitaria_id,
+    queryFn:  () => appClient.entities.ContaPagar.filter({ confeitaria_id: user.confeitaria_id }, '-data_vencimento'),
+    enabled:  !!user?.confeitaria_id,
   });
-
   const { data: pedidos = [] } = useQuery({
     queryKey: ['pedidos', user?.confeitaria_id],
-    queryFn: () => appClient.entities.Pedido.filter({ confeitaria_id: user.confeitaria_id }),
-    enabled: !!user?.confeitaria_id,
+    queryFn:  () => appClient.entities.Pedido.filter({ confeitaria_id: user.confeitaria_id }),
+    enabled:  !!user?.confeitaria_id,
   });
-
   const { data: parcelamentos = [] } = useQuery({
     queryKey: ['parcelamentos', user?.confeitaria_id],
-    queryFn: () => appClient.entities.ParcelamentoPedido.filter({ confeitaria_id: user.confeitaria_id }),
-    enabled: !!user?.confeitaria_id,
+    queryFn:  () => appClient.entities.ParcelamentoPedido.filter({ confeitaria_id: user.confeitaria_id }),
+    enabled:  !!user?.confeitaria_id,
+  });
+  const { data: clientes = [] } = useQuery({
+    queryKey: ['clientes', user?.confeitaria_id],
+    queryFn:  () => appClient.entities.Cliente.filter({ confeitaria_id: user.confeitaria_id }, 'nome'),
+    enabled:  !!user?.confeitaria_id,
   });
 
-  // Mutations
-  const createContaPagar = useMutation({
-    mutationFn: (data) => appClient.entities.ContaPagar.create({
-      ...data,
-      valor: parseFloat(data.valor) || 0,
-      confeitaria_id: user.confeitaria_id,
-      pago: false,
-    }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['contasPagar'] });
-      setShowContaPagarForm(false);
-      setContaPagarForm({
-        descricao: '',
-        fornecedor: '',
-        valor: '',
-        data_vencimento: '',
-        categoria: 'ingredientes',
-      });
-    },
-  });
-
-  const createContaReceber = useMutation({
-    mutationFn: (data) => appClient.entities.ContaReceber.create({
-      ...data,
-      valor: parseFloat(data.valor) || 0,
-      confeitaria_id: user.confeitaria_id,
-      recebido: false,
+  // ── Mutations ──
+  const createReceita = useMutation({
+    mutationFn: (d) => appClient.entities.ContaReceber.create({
+      cliente_nome:    d.cliente_nome || null,
+      descricao:       d.descricao    || null,
+      tipo:            d.tipo_receita,
+      valor:           parseFloat(d.valor) || 0,
+      amount:          parseFloat(d.valor) || 0,
+      data_vencimento: d.data_vencimento || null,
+      confeitaria_id:  user.confeitaria_id,
+      recebido:        false,
     }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['contasReceber'] });
-      setShowContaReceberForm(false);
-      setContaReceberForm({
-        cliente_nome: '',
-        descricao: '',
-        valor: '',
-        data_vencimento: '',
-        tipo: 'pagamento_final',
-      });
+      toast.success('Receita salva com sucesso!');
+      setShowForm(false);
+      setForm(makeEmptyForm());
+      setClienteManual(false);
     },
+    onError: (err) => toast.error('Erro ao salvar receita: ' + (err?.message || 'tente novamente')),
   });
-
+  const createDespesa = useMutation({
+    mutationFn: (d) => appClient.entities.ContaPagar.create({
+      descricao:       d.descricao || null,
+      fornecedor:      d.fornecedor || null,
+      categoria:       d.categoria,
+      valor:           parseFloat(d.valor) || 0,
+      amount:          parseFloat(d.valor) || 0,
+      data_vencimento: d.data_vencimento || null,
+      confeitaria_id:  user.confeitaria_id,
+      pago:            false,
+    }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['contasPagar'] });
+      toast.success('Despesa salva com sucesso!');
+      setShowForm(false);
+      setForm(makeEmptyForm());
+    },
+    onError: (err) => toast.error('Erro ao salvar despesa: ' + (err?.message || 'tente novamente')),
+  });
   const marcarPago = useMutation({
-    mutationFn: ({ id, pago }) => appClient.entities.ContaPagar.update(id, { 
-      pago, 
-      data_pagamento: pago ? format(new Date(), 'yyyy-MM-dd') : null 
-    }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['contasPagar'] }),
+    mutationFn: ({ id, pago }) => appClient.entities.ContaPagar.update(id, { pago, data_pagamento: pago ? format(new Date(), 'yyyy-MM-dd') : null }),
+    onSuccess:  () => queryClient.invalidateQueries({ queryKey: ['contasPagar'] }),
+    onError:    (err) => toast.error('Erro: ' + (err?.message || 'tente novamente')),
   });
-
   const marcarRecebido = useMutation({
-    mutationFn: ({ id, recebido }) => appClient.entities.ContaReceber.update(id, { 
-      recebido, 
-      data_recebimento: recebido ? format(new Date(), 'yyyy-MM-dd') : null 
-    }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['contasReceber'] }),
+    mutationFn: ({ id, recebido }) => appClient.entities.ContaReceber.update(id, { recebido, data_recebimento: recebido ? format(new Date(), 'yyyy-MM-dd') : null }),
+    onSuccess:  () => queryClient.invalidateQueries({ queryKey: ['contasReceber'] }),
+    onError:    (err) => toast.error('Erro: ' + (err?.message || 'tente novamente')),
   });
-
-  const deleteContaPagar = useMutation({
-    mutationFn: (id) => appClient.entities.ContaPagar.delete(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['contasPagar'] }),
-  });
-
-  const deleteContaReceber = useMutation({
-    mutationFn: (id) => appClient.entities.ContaReceber.delete(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['contasReceber'] }),
-  });
-
   const marcarParcelaPaga = useMutation({
-    mutationFn: ({ id, pago }) => appClient.entities.ParcelamentoPedido.update(id, {
-      status: pago ? 'pago' : 'pendente',
-      data_pagamento: pago ? format(new Date(), 'yyyy-MM-dd') : null,
-    }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['parcelamentos'] }),
+    mutationFn: ({ id, pago }) => appClient.entities.ParcelamentoPedido.update(id, { status: pago ? 'pago' : 'pendente', data_pagamento: pago ? format(new Date(), 'yyyy-MM-dd') : null }),
+    onSuccess:  () => queryClient.invalidateQueries({ queryKey: ['parcelamentos'] }),
+    onError:    (err) => toast.error('Erro: ' + (err?.message || 'tente novamente')),
+  });
+  const deleteDespesa = useMutation({
+    mutationFn: (id) => appClient.entities.ContaPagar.delete(id),
+    onSuccess:  () => queryClient.invalidateQueries({ queryKey: ['contasPagar'] }),
+    onError:    (err) => toast.error('Erro ao excluir: ' + (err?.message || 'tente novamente')),
+  });
+  const deleteReceita = useMutation({
+    mutationFn: (id) => appClient.entities.ContaReceber.delete(id),
+    onSuccess:  () => queryClient.invalidateQueries({ queryKey: ['contasReceber'] }),
+    onError:    (err) => toast.error('Erro ao excluir: ' + (err?.message || 'tente novamente')),
   });
 
-  // Cálculos
-  const mesSelecionado = parseISO(`${mesAtual}-01`);
-  const inicioMes = startOfMonth(mesSelecionado);
-  const fimMes = endOfMonth(mesSelecionado);
-
-  const pedidosMes = pedidos.filter(p => {
-    if (!p.created_date) return false;
-    const date = parseISO(p.created_date);
-    return isWithinInterval(date, { start: inicioMes, end: fimMes }) && p.status !== 'cancelado';
-  });
-
-  const receitaMes = pedidosMes.reduce((acc, p) => acc + (p.valor_total || 0), 0);
-
-  const despesasMes = contasPagar
-    .filter(c => {
-      if (!c.data_vencimento) return false;
-      const date = parseISO(c.data_vencimento);
-      return isWithinInterval(date, { start: inicioMes, end: fimMes });
-    })
-    .reduce((acc, c) => acc + (c.valor || 0), 0);
-
-  const lucroMes = receitaMes - despesasMes;
-
-  // Pedidos aprovados (não orcamento, não cancelado)
-  const pedidosAprovados = new Set(
-    pedidos.filter(p => p.status !== 'orcamento' && p.status !== 'cancelado').map(p => p.id)
-  );
-
-  // Parcelas do mês selecionado, apenas de pedidos aprovados
-  const parcelamentosMes = parcelamentos.filter(p => {
-    if (!pedidosAprovados.has(p.pedido_id)) return false;
-    if (!p.data_vencimento) return false;
-    const date = parseISO(p.data_vencimento);
-    return isWithinInterval(date, { start: inicioMes, end: fimMes });
-  });
-
-  const installmentCountsByPedido = parcelamentos.reduce((acc, parcela) => {
-    if (!parcela?.pedido_id) return acc;
-    acc[parcela.pedido_id] = (acc[parcela.pedido_id] || 0) + 1;
-    return acc;
-  }, {});
-
-  const getPedidoInstallments = (pedido = null) => {
-    const parcelamentoCount = pedido?.id ? installmentCountsByPedido[pedido.id] : 0;
-    if (parcelamentoCount > 0) return parcelamentoCount;
-    return Math.max(Number(pedido?.parcelas) || 1, 1);
+  const handleSave = () => {
+    if (!form.valor) return;
+    if (form.tipo === 'receita') {
+      if (!form.cliente_nome && !form.descricao) return;
+      createReceita.mutate(form);
+    } else {
+      if (!form.descricao) return;
+      createDespesa.mutate(form);
+    }
   };
 
-  const parcelasPendentes = parcelamentosMes.filter(p => p.status === 'pendente');
-  const parcelasRecebidasMes = parcelamentosMes.filter(p => p.status === 'pago');
+  const isSaving = createReceita.isPending || createDespesa.isPending;
 
-  const aReceberPendente = contasReceber.filter(c => !c.recebido).reduce((acc, c) => acc + (c.valor || 0), 0)
-    + parcelasPendentes.reduce((acc, p) => acc + (parseFloat(p.valor) || 0), 0);
-  const aPagarPendente = contasPagar.filter(c => !c.pago).reduce((acc, c) => acc + (c.valor || 0), 0);
+  // ── Parcelamentos ──
+  const pedidosAprovados = useMemo(() =>
+    new Set(pedidos.filter(p => p.status !== 'orcamento' && p.status !== 'cancelado').map(p => p.id)),
+    [pedidos]
+  );
+  const installmentCountsByPedido = useMemo(() =>
+    parcelamentos.reduce((acc, p) => { if (p?.pedido_id) acc[p.pedido_id] = (acc[p.pedido_id] || 0) + 1; return acc; }, {}),
+    [parcelamentos]
+  );
+  const getPedidoInstallments = (ped) => {
+    const c = ped?.id ? installmentCountsByPedido[ped.id] : 0;
+    return c > 0 ? c : Math.max(Number(ped?.parcelas) || 1, 1);
+  };
+
+  // ── Lista unificada do mês ──
+  const lancamentos = useMemo(() => {
+    const items = [];
+
+    parcelamentos
+      .filter(p => pedidosAprovados.has(p.pedido_id) && inMonth(p.data_vencimento, inicioMes, fimMes))
+      .forEach(p => {
+        const ped          = pedidos.find(pd => pd.id === p.pedido_id);
+        const installments = getPedidoInstallments(ped);
+        const isPago       = p.status === 'pago';
+        items.push({
+          id:       `parcela-${p.id}`,
+          tipo:     'receita',
+          fonte:    'parcela',
+          nome:     installments <= 1
+            ? (ped?.cliente_nome || 'Cliente')
+            : `${ped?.cliente_nome || 'Cliente'} — Parcela ${p.numero_parcela}/${installments}`,
+          meta:     getPedidoPaymentMeta(ped, p, installments),
+          valor:    parseFloat(p.valor) || 0,
+          data:     p.data_vencimento,
+          pago:     isPago,
+          rawId:    p.id,
+          onToggle: () => marcarParcelaPaga.mutate({ id: p.id, pago: !isPago }),
+        });
+      });
+
+    contasReceber
+      .filter(c => inMonth(c.data_vencimento, inicioMes, fimMes))
+      .forEach(c => {
+        items.push({
+          id:       `receber-${c.id}`,
+          tipo:     'receita',
+          fonte:    'manual',
+          nome:     c.cliente_nome || c.descricao || 'Receita',
+          meta:     [tiposReceita.find(t => t.value === c.tipo)?.label, c.descricao].filter(Boolean).join(' • '),
+          valor:    c.valor || 0,
+          data:     c.data_vencimento,
+          pago:     !!c.recebido,
+          rawId:    c.id,
+          onToggle: () => marcarRecebido.mutate({ id: c.id, recebido: !c.recebido }),
+          onDelete: () => deleteReceita.mutate(c.id),
+        });
+      });
+
+    contasPagar
+      .filter(c => inMonth(c.data_vencimento, inicioMes, fimMes))
+      .forEach(c => {
+        items.push({
+          id:       `pagar-${c.id}`,
+          tipo:     'despesa',
+          fonte:    'manual',
+          nome:     c.descricao || 'Despesa',
+          meta:     [categoriasDespesa.find(x => x.value === c.categoria)?.label, c.fornecedor].filter(Boolean).join(' • '),
+          valor:    c.valor || 0,
+          data:     c.data_vencimento,
+          pago:     !!c.pago,
+          rawId:    c.id,
+          onToggle: () => marcarPago.mutate({ id: c.id, pago: !c.pago }),
+          onDelete: () => deleteDespesa.mutate(c.id),
+        });
+      });
+
+    return items.sort((a, b) => (a.data || '').localeCompare(b.data || ''));
+  }, [parcelamentos, contasReceber, contasPagar, pedidos, inicioMes, fimMes, pedidosAprovados, installmentCountsByPedido]);
+
+  // ── Totais ──
+  const receitaMes = lancamentos.filter(l => l.tipo === 'receita').reduce((s, l) => s + l.valor, 0);
+  const despesaMes = lancamentos.filter(l => l.tipo === 'despesa').reduce((s, l) => s + l.valor, 0);
+  const lucroMes   = receitaMes - despesaMes;
+  const aReceber   = lancamentos.filter(l => l.tipo === 'receita' && !l.pago).reduce((s, l) => s + l.valor, 0);
+  const aPagar     = lancamentos.filter(l => l.tipo === 'despesa' && !l.pago).reduce((s, l) => s + l.valor, 0);
+
+  // ── Filtro ──
+  const lancamentosFiltrados = lancamentos.filter(l => {
+    if (filtroTipo   !== 'todos' && l.tipo !== filtroTipo)         return false;
+    if (filtroStatus === 'pendente' && l.pago)                     return false;
+    if (filtroStatus === 'pago'     && !l.pago)                    return false;
+    return true;
+  });
+
+  const TIPO_FILTERS   = [{ key: 'todos', label: 'Todos' }, { key: 'receita', label: 'Receitas' }, { key: 'despesa', label: 'Despesas' }];
+  const STATUS_FILTERS = [{ key: 'todos', label: 'Todos' }, { key: 'pendente', label: 'Pendente' }, { key: 'pago', label: 'Pago' }];
 
   if (!user) return null;
 
   return (
-    <div className="space-y-6">
-      {/* Seletor de Mês */}
-      <div className="flex items-center justify-between">
-        <Input
-          type="month"
-          value={mesAtual}
-          onChange={(e) => setMesAtual(e.target.value)}
-          className="w-48"
-        />
+    <div className="space-y-4 pb-10">
+
+      {/* ── Header ── */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+
+        {/* Seletor mês + ano */}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => navegarMes(-1)}
+            className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors"
+          >
+            <ChevronLeft className="w-5 h-5" />
+          </button>
+
+          <div className="flex items-center gap-1.5">
+            <Select value={String(mesSel)} onValueChange={v => setMesSel(Number(v))}>
+              <SelectTrigger className="h-9 w-[120px] text-sm font-medium">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {MESES.map(m => (
+                  <SelectItem key={m.value} value={String(m.value)}>{m.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select value={String(anoSel)} onValueChange={v => setAnoSel(Number(v))}>
+              <SelectTrigger className="h-9 w-[84px] text-sm font-medium">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {anosDisponiveis.map(y => (
+                  <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <button
+            onClick={() => navegarMes(1)}
+            className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors"
+          >
+            <ChevronRight className="w-5 h-5" />
+          </button>
+        </div>
+
+        <Button
+          onClick={() => { setForm(makeEmptyForm()); setClienteManual(false); setShowForm(true); }}
+          className="bg-rose-500 hover:bg-rose-600 text-white gap-2 hidden sm:flex"
+        >
+          <Plus className="w-4 h-4" />
+          Novo Lançamento
+        </Button>
       </div>
 
-      {/* Cards de Resumo */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="border-0 shadow-lg shadow-gray-100/50">
-          <CardContent className="p-5">
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-sm text-gray-500">Receita do Mês</p>
-                <p className="text-2xl font-bold text-gray-900 mt-1">
-                  R$ {receitaMes.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                </p>
-                <p className="text-sm text-gray-400 mt-1">{pedidosMes.length} pedidos</p>
-              </div>
-              <div className="p-3 rounded-xl bg-emerald-100">
-                <TrendingUp className="w-5 h-5 text-emerald-600" />
-              </div>
+      {/* ── Cards de resumo ── */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <Card className="border-0 shadow-sm">
+          <CardContent className="p-4 flex items-start justify-between">
+            <div>
+              <p className="text-xs text-gray-500">Receitas</p>
+              <p className="text-lg sm:text-xl font-bold text-gray-900 mt-0.5">R$ {fmt(receitaMes)}</p>
+            </div>
+            <div className="p-2 rounded-xl bg-emerald-100">
+              <TrendingUp className="w-4 h-4 text-emerald-600" />
             </div>
           </CardContent>
         </Card>
-
-        <Card className="border-0 shadow-lg shadow-gray-100/50">
-          <CardContent className="p-5">
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-sm text-gray-500">Despesas do Mês</p>
-                <p className="text-2xl font-bold text-gray-900 mt-1">
-                  R$ {despesasMes.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                </p>
-              </div>
-              <div className="p-3 rounded-xl bg-red-100">
-                <TrendingDown className="w-5 h-5 text-red-600" />
-              </div>
+        <Card className="border-0 shadow-sm">
+          <CardContent className="p-4 flex items-start justify-between">
+            <div>
+              <p className="text-xs text-gray-500">Despesas</p>
+              <p className="text-lg sm:text-xl font-bold text-gray-900 mt-0.5">R$ {fmt(despesaMes)}</p>
+            </div>
+            <div className="p-2 rounded-xl bg-red-100">
+              <TrendingDown className="w-4 h-4 text-red-600" />
             </div>
           </CardContent>
         </Card>
-
-        <Card className="border-0 shadow-lg shadow-gray-100/50">
-          <CardContent className="p-5">
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-sm text-gray-500">Lucro do Mês</p>
-                <p className={`text-2xl font-bold mt-1 ${lucroMes >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                  R$ {lucroMes.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                </p>
-              </div>
-              <div className={`p-3 rounded-xl ${lucroMes >= 0 ? 'bg-emerald-100' : 'bg-red-100'}`}>
-                <DollarSign className={`w-5 h-5 ${lucroMes >= 0 ? 'text-emerald-600' : 'text-red-600'}`} />
-              </div>
+        <Card className="border-0 shadow-sm">
+          <CardContent className="p-4 flex items-start justify-between">
+            <div>
+              <p className="text-xs text-gray-500">Lucro</p>
+              <p className={`text-lg sm:text-xl font-bold mt-0.5 ${lucroMes >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                R$ {fmt(lucroMes)}
+              </p>
+            </div>
+            <div className={`p-2 rounded-xl ${lucroMes >= 0 ? 'bg-emerald-100' : 'bg-red-100'}`}>
+              <DollarSign className={`w-4 h-4 ${lucroMes >= 0 ? 'text-emerald-600' : 'text-red-600'}`} />
             </div>
           </CardContent>
         </Card>
-
-        <Card className="border-0 shadow-lg shadow-gray-100/50">
-          <CardContent className="p-5">
-            <div className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-500">A Receber</span>
-                <span className="font-semibold text-emerald-600">
-                  R$ {aReceberPendente.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                </span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-500">A Pagar</span>
-                <span className="font-semibold text-red-600">
-                  R$ {aPagarPendente.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                </span>
-              </div>
+        <Card className="border-0 shadow-sm">
+          <CardContent className="p-4 space-y-2">
+            <div className="flex justify-between text-sm items-center">
+              <span className="flex items-center gap-1 text-gray-500 text-xs sm:text-sm">
+                <ArrowUpCircle className="w-3.5 h-3.5 text-emerald-500 shrink-0" />A Receber
+              </span>
+              <span className="font-semibold text-emerald-600 text-xs sm:text-sm">R$ {fmt(aReceber)}</span>
+            </div>
+            <div className="flex justify-between text-sm items-center">
+              <span className="flex items-center gap-1 text-gray-500 text-xs sm:text-sm">
+                <ArrowDownCircle className="w-3.5 h-3.5 text-red-500 shrink-0" />A Pagar
+              </span>
+              <span className="font-semibold text-red-600 text-xs sm:text-sm">R$ {fmt(aPagar)}</span>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="bg-gray-100">
-          <TabsTrigger value="visao">Visão Geral</TabsTrigger>
-          <TabsTrigger value="receber">A Receber</TabsTrigger>
-          <TabsTrigger value="pagar">A Pagar</TabsTrigger>
-        </TabsList>
+      {/* ── Filtros ── */}
+      <div className="flex flex-wrap gap-2 items-center">
 
-        <TabsContent value="visao" className="mt-6">
-          <div className="grid lg:grid-cols-2 gap-6">
-            {/* A Receber Pendente */}
-            <Card className="border-0 shadow-lg shadow-gray-100/50">
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <ArrowUpCircle className="w-5 h-5 text-emerald-500" />
-                  A Receber
-                </CardTitle>
-                <span className="text-sm font-semibold text-emerald-600">
-                  R$ {aReceberPendente.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+        {/* Pill buttons — desktop */}
+        <div className="hidden sm:flex gap-1 bg-gray-100 p-1 rounded-lg">
+          {TIPO_FILTERS.map(f => (
+            <button key={f.key} onClick={() => setFiltroTipo(f.key)}
+              className={`px-2.5 py-1 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${filtroTipo === f.key ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}>
+              {f.label}
+            </button>
+          ))}
+        </div>
+        <div className="hidden sm:flex gap-1 bg-gray-100 p-1 rounded-lg">
+          {STATUS_FILTERS.map(f => (
+            <button key={f.key} onClick={() => setFiltroStatus(f.key)}
+              className={`px-2.5 py-1 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${filtroStatus === f.key ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}>
+              {f.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Dropdowns — mobile */}
+        <div className="flex sm:hidden gap-2 w-full">
+          <Select value={filtroTipo} onValueChange={setFiltroTipo}>
+            <SelectTrigger className="h-9 flex-1 text-sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {TIPO_FILTERS.map(f => <SelectItem key={f.key} value={f.key}>{f.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={filtroStatus} onValueChange={setFiltroStatus}>
+            <SelectTrigger className="h-9 flex-1 text-sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {STATUS_FILTERS.map(f => <SelectItem key={f.key} value={f.key}>{f.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Botão novo lançamento — mobile (abaixo dos dropdowns) */}
+        <Button
+          onClick={() => { setForm(makeEmptyForm()); setClienteManual(false); setShowForm(true); }}
+          className="sm:hidden bg-rose-500 hover:bg-rose-600 text-white gap-2 w-full"
+        >
+          <Plus className="w-4 h-4" />
+          Novo Lançamento
+        </Button>
+
+        <span className="text-xs text-gray-400 ml-auto hidden sm:block">{lancamentosFiltrados.length} lançamento(s)</span>
+      </div>
+
+      {/* ── Lista unificada ── */}
+      <div className="space-y-2">
+        {lancamentosFiltrados.length === 0 ? (
+          <div className="text-center py-16 text-gray-400 bg-white rounded-xl border border-dashed border-gray-200 text-sm">
+            Nenhum lançamento encontrado para o período
+          </div>
+        ) : lancamentosFiltrados.map(item => (
+          <div
+            key={item.id}
+            className={`flex items-center gap-2 sm:gap-4 p-3 sm:p-4 rounded-xl border transition-colors ${
+              item.pago
+                ? item.tipo === 'receita' ? 'bg-emerald-50 border-emerald-100' : 'bg-gray-50 border-gray-100'
+                : item.tipo === 'receita' ? 'bg-white border-gray-100 hover:bg-emerald-50/30' : 'bg-white border-gray-100 hover:bg-red-50/30'
+            }`}
+          >
+            {/* Checkbox */}
+            <button
+              onClick={item.onToggle}
+              className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors ${
+                item.pago
+                  ? item.tipo === 'receita' ? 'bg-emerald-500 border-emerald-500 text-white' : 'bg-gray-400 border-gray-400 text-white'
+                  : 'border-gray-300 hover:border-gray-400'
+              }`}
+            >
+              {item.pago && <Check className="w-3.5 h-3.5" />}
+            </button>
+
+            {/* Badge tipo — oculto em telas muito pequenas */}
+            <span className={`hidden xs:inline-flex sm:inline-flex shrink-0 items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
+              item.tipo === 'receita' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'
+            }`}>
+              {item.tipo === 'receita' ? <ArrowUpCircle className="w-3 h-3" /> : <ArrowDownCircle className="w-3 h-3" />}
+              <span className="hidden sm:inline">{item.tipo === 'receita' ? 'Receita' : 'Despesa'}</span>
+            </span>
+
+            {/* Conteúdo */}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-1.5">
+                {/* Badge inline em mobile */}
+                <span className={`inline-flex sm:hidden shrink-0 items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-medium ${
+                  item.tipo === 'receita' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'
+                }`}>
+                  {item.tipo === 'receita' ? <ArrowUpCircle className="w-2.5 h-2.5" /> : <ArrowDownCircle className="w-2.5 h-2.5" />}
                 </span>
-              </CardHeader>
-              <CardContent>
-                {(() => {
-                  const pendentesContas = contasReceber.filter(c => !c.recebido).slice(0, 3);
-                  const pendentesItems = [
-                    ...parcelasPendentes.map(p => {
-                      const ped = pedidos.find(pd => pd.id === p.pedido_id);
-                      const installments = getPedidoInstallments(ped);
-                      const badge = getPedidoPaymentBadge(ped, installments);
-                      return {
-                        id: p.id,
-                        tipo: 'parcela',
-                        nome: installments <= 1
-                          ? (ped?.cliente_nome || 'Cliente')
-                          : `${ped?.cliente_nome || 'Cliente'} - Parcela ${p.numero_parcela}`,
-                        badge: badge.label,
-                        badgeClass: badge.className,
-                        meta: getPedidoPaymentMeta(ped, p, installments),
-                        valor: parseFloat(p.valor) || 0,
-                        data: p.data_vencimento,
-                      };
-                    }),
-                    ...pendentesContas.map(c => ({
-                      id: c.id,
-                      tipo: 'conta',
-                      nome: formatRecebimentoTitle(c),
-                      badge: tiposReceber.find(t => t.value === c.tipo)?.label,
-                      badgeClass: 'bg-gray-100 text-gray-600',
-                      valor: c.valor || 0,
-                      data: c.data_vencimento,
-                    })),
-                  ].slice(0, 5);
-
-                  if (pendentesItems.length === 0) {
-                    return <p className="text-gray-500 text-sm text-center py-4">Nenhum valor pendente</p>;
-                  }
-
-                  return (
-                    <div className="space-y-2">
-                      {pendentesItems.map(item => (
-                        <div key={item.id} className="flex items-center justify-between p-3 bg-emerald-50 rounded-lg">
-                          <div>
-                            <p className="font-medium text-gray-900 text-sm">{item.nome}</p>
-                            <div className="flex items-center gap-2 mt-1">
-                              <Badge variant="secondary" className={`text-xs ${item.badgeClass}`}>
-                                {item.badge}
-                              </Badge>
-                              {item.meta && (
-                                <span className="text-xs text-gray-500">{item.meta}</span>
-                              )}
-                              {item.data && (
-                                <span className="text-xs text-gray-500">
-                                  Vence: {format(parseISO(item.data), 'dd/MM/yyyy')}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                          <span className="font-semibold text-emerald-600 text-sm">
-                            R$ {item.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  );
-                })()}
-              </CardContent>
-            </Card>
-
-            {/* A Pagar Pendente */}
-            <Card className="border-0 shadow-lg shadow-gray-100/50">
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <ArrowDownCircle className="w-5 h-5 text-red-500" />
-                  A Pagar
-                </CardTitle>
-                <span className="text-sm font-semibold text-red-600">
-                  R$ {aPagarPendente.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                </span>
-              </CardHeader>
-              <CardContent>
-                {contasPagar.filter(c => !c.pago).slice(0, 5).length === 0 ? (
-                  <p className="text-gray-500 text-sm text-center py-4">Nenhum pagamento pendente</p>
-                ) : (
-                  <div className="space-y-2">
-                    {contasPagar.filter(c => !c.pago).slice(0, 5).map((conta) => (
-                      <div key={conta.id} className="flex items-center justify-between p-3 bg-red-50 rounded-lg">
-                        <div>
-                          <p className="font-medium text-gray-900 text-sm">{conta.descricao}</p>
-                          <div className="flex items-center gap-2 mt-1">
-                            <Badge variant="secondary" className="text-xs">
-                              {categoriasPagar.find(c => c.value === conta.categoria)?.label}
-                            </Badge>
-                            {conta.data_vencimento && (
-                              <span className="text-xs text-gray-500">
-                                Vence: {format(parseISO(conta.data_vencimento), 'dd/MM/yyyy')}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                        <span className="font-semibold text-red-600 text-sm">
-                          R$ {conta.valor?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
+                <p className={`font-medium text-sm truncate ${item.pago ? 'line-through text-gray-400' : 'text-gray-900'}`}>
+                  {item.nome}
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5">
+                {item.meta && <span className="text-xs text-gray-500 truncate max-w-[180px] sm:max-w-none">{item.meta}</span>}
+                {item.data && (
+                  <span className="text-xs text-gray-400">Vence: {fmtDate(item.data)}</span>
                 )}
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
+              </div>
+            </div>
 
-        <TabsContent value="receber" className="mt-6">
-          <Card className="border-0 shadow-lg shadow-gray-100/50">
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>Contas a Receber</CardTitle>
-              <Button
-                onClick={() => setShowContaReceberForm(true)}
-                className="bg-rose-500 hover:bg-rose-600"
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                Nova Conta
-              </Button>
-            </CardHeader>
-            <CardContent>
-              {/* Parcelas de pedidos */}
-              {parcelamentosMes.length > 0 && (
-                <div className="space-y-2 mb-4">
-                  <h3 className="text-sm font-semibold text-gray-500 mb-2">Recebimentos de Pedidos</h3>
-                  {parcelamentosMes.map((parcela) => {
-                    const ped = pedidos.find(p => p.id === parcela.pedido_id);
-                    const installments = getPedidoInstallments(ped);
-                    const badge = getPedidoPaymentBadge(ped, installments);
-                    const isPago = parcela.status === 'pago';
-                    return (
-                      <div
-                        key={parcela.id}
-                        className={`flex items-center justify-between p-4 rounded-xl ${
-                          isPago ? 'bg-emerald-50' : 'bg-gray-50'
-                        }`}
+            {/* Valor + ações */}
+            <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+              <span className={`font-bold text-sm ${
+                item.pago ? 'text-gray-400' : item.tipo === 'receita' ? 'text-emerald-600' : 'text-red-600'
+              }`}>
+                R$ {fmt(item.valor)}
+              </span>
+              {item.onDelete && (
+                <button
+                  onClick={item.onDelete}
+                  className="p-1.5 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* ── Dialog novo lançamento ── */}
+      <Dialog open={showForm} onOpenChange={(o) => { if (!o) { setShowForm(false); setForm(makeEmptyForm()); setClienteManual(false); } }}>
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Novo Lançamento</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+
+            {/* Tipo */}
+            <div className="space-y-1.5">
+              <Label>Tipo de lançamento</Label>
+              <Select value={form.tipo} onValueChange={v => { setForm({ ...makeEmptyForm(), tipo: v }); setClienteManual(false); }}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="receita">
+                    <span className="flex items-center gap-2">
+                      <ArrowUpCircle className="w-4 h-4 text-emerald-600" />Receita
+                    </span>
+                  </SelectItem>
+                  <SelectItem value="despesa">
+                    <span className="flex items-center gap-2">
+                      <ArrowDownCircle className="w-4 h-4 text-red-600" />Despesa
+                    </span>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Campos dinâmicos: RECEITA */}
+            {form.tipo === 'receita' && (
+              <>
+                <div className="space-y-1.5">
+                  <Label>Cliente</Label>
+                  {!clienteManual ? (
+                    <Select
+                      value={form.cliente_nome}
+                      onValueChange={v => {
+                        if (v === '__manual__') {
+                          setClienteManual(true);
+                          setForm(f => ({ ...f, cliente_nome: '' }));
+                        } else {
+                          setForm(f => ({ ...f, cliente_nome: v }));
+                        }
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione um cliente..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {clientes.map(c => (
+                          <SelectItem key={c.id} value={c.nome || c.id}>{c.nome}</SelectItem>
+                        ))}
+                        <SelectItem value="__manual__">
+                          <span className="text-gray-500 italic">Digitar manualmente...</span>
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <div className="flex gap-2">
+                      <Input
+                        placeholder="Nome do cliente"
+                        value={form.cliente_nome}
+                        onChange={e => setForm(f => ({ ...f, cliente_nome: e.target.value }))}
+                        autoFocus
+                      />
+                      <button
+                        type="button"
+                        onClick={() => { setClienteManual(false); setForm(f => ({ ...f, cliente_nome: '' })); }}
+                        className="text-xs text-gray-400 hover:text-gray-600 whitespace-nowrap"
                       >
-                        <div className="flex items-center gap-4">
-                          <button
-                            onClick={() => marcarParcelaPaga.mutate({ id: parcela.id, pago: !isPago })}
-                            className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${
-                              isPago
-                                ? 'bg-emerald-500 border-emerald-500 text-white'
-                                : 'border-gray-300'
-                            }`}
-                          >
-                            {isPago && <Check className="w-4 h-4" />}
-                          </button>
-                          <div>
-                            <p className={`font-medium ${isPago ? 'line-through text-gray-500' : 'text-gray-900'}`}>
-                              {installments <= 1
-                                ? (ped?.cliente_nome || 'Cliente')
-                                : `${ped?.cliente_nome || 'Cliente'} - Parcela ${parcela.numero_parcela}`}
-                            </p>
-                            <div className="flex items-center gap-2 text-sm text-gray-500">
-                              <Badge
-                                variant="secondary"
-                                className={`text-xs ${badge.className}`}
-                              >
-                                {badge.label}
-                              </Badge>
-                              <span>{getPedidoPaymentMeta(ped, parcela, installments)}</span>
-                              {parcela.data_vencimento && (
-                                <span>Vence: {format(parseISO(parcela.data_vencimento), 'dd/MM/yyyy')}</span>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                        <span className={`font-bold ${isPago ? 'text-emerald-600' : 'text-gray-900'}`}>
-                          R$ {parseFloat(parcela.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
-              {/* Contas manuais */}
-              {contasReceber.length > 0 && (
-                <div className="space-y-2">
-                  {parcelamentosMes.length > 0 && (
-                    <h3 className="text-sm font-semibold text-gray-500 mb-2">Contas Manuais</h3>
+                        ← Lista
+                      </button>
+                    </div>
                   )}
-                  {contasReceber.map((conta) => (
-                    <div
-                      key={conta.id}
-                      className={`flex items-center justify-between p-4 rounded-xl ${
-                        conta.recebido ? 'bg-emerald-50' : 'bg-gray-50'
-                      }`}
-                    >
-                      <div className="flex items-center gap-4">
-                        <button
-                          onClick={() => marcarRecebido.mutate({ id: conta.id, recebido: !conta.recebido })}
-                          className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${
-                            conta.recebido
-                              ? 'bg-emerald-500 border-emerald-500 text-white'
-                              : 'border-gray-300'
-                          }`}
-                        >
-                          {conta.recebido && <Check className="w-4 h-4" />}
-                        </button>
-                        <div>
-                          <p className={`font-medium ${conta.recebido ? 'line-through text-gray-500' : 'text-gray-900'}`}>
-                            {formatRecebimentoTitle(conta)}
-                          </p>
-                          <div className="flex items-center gap-2 text-sm text-gray-500">
-                            <Badge variant="secondary" className="text-xs">
-                              {tiposReceber.find(t => t.value === conta.tipo)?.label}
-                            </Badge>
-                            {formatRecebimentoMeta(conta) && (
-                              <span>{formatRecebimentoMeta(conta)}</span>
-                            )}
-                            {conta.data_vencimento && (
-                              <span>Vence: {format(parseISO(conta.data_vencimento), "dd/MM/yyyy")}</span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <span className={`font-bold ${conta.recebido ? 'text-emerald-600' : 'text-gray-900'}`}>
-                          R$ {conta.valor?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                        </span>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="text-red-600 hover:bg-red-50"
-                          onClick={() => deleteContaReceber.mutate(conta.id)}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
                 </div>
-              )}
-
-              {contasReceber.length === 0 && parcelamentosMes.length === 0 && (
-                <p className="text-gray-500 text-center py-8">Nenhuma conta a receber</p>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="pagar" className="mt-6">
-          <Card className="border-0 shadow-lg shadow-gray-100/50">
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>Contas a Pagar</CardTitle>
-              <Button
-                onClick={() => setShowContaPagarForm(true)}
-                className="bg-rose-500 hover:bg-rose-600"
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                Nova Conta
-              </Button>
-            </CardHeader>
-            <CardContent>
-              {contasPagar.length === 0 ? (
-                <p className="text-gray-500 text-center py-8">Nenhuma conta a pagar</p>
-              ) : (
-                <div className="space-y-2">
-                  {contasPagar.map((conta) => (
-                    <div
-                      key={conta.id}
-                      className={`flex items-center justify-between p-4 rounded-xl ${
-                        conta.pago ? 'bg-gray-100' : 'bg-red-50'
-                      }`}
-                    >
-                      <div className="flex items-center gap-4">
-                        <button
-                          onClick={() => marcarPago.mutate({ id: conta.id, pago: !conta.pago })}
-                          className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${
-                            conta.pago
-                              ? 'bg-gray-500 border-gray-500 text-white'
-                              : 'border-gray-300'
-                          }`}
-                        >
-                          {conta.pago && <Check className="w-4 h-4" />}
-                        </button>
-                        <div>
-                          <p className={`font-medium ${conta.pago ? 'line-through text-gray-500' : 'text-gray-900'}`}>
-                            {conta.descricao}
-                          </p>
-                          <div className="flex items-center gap-2 text-sm text-gray-500">
-                            <Badge variant="secondary" className="text-xs">
-                              {categoriasPagar.find(c => c.value === conta.categoria)?.label}
-                            </Badge>
-                            {conta.fornecedor && <span>{conta.fornecedor}</span>}
-                            {conta.data_vencimento && (
-                              <span>Vence: {format(parseISO(conta.data_vencimento), "dd/MM/yyyy")}</span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <span className={`font-bold ${conta.pago ? 'text-gray-500' : 'text-red-600'}`}>
-                          R$ {conta.valor?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                        </span>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="text-red-600 hover:bg-red-50"
-                          onClick={() => deleteContaPagar.mutate(conta.id)}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
+                <div className="space-y-1.5">
+                  <Label>Descrição</Label>
+                  <Input placeholder="Ex: Pagamento final do bolo" value={form.descricao}
+                    onChange={e => setForm(f => ({ ...f, descricao: e.target.value }))} />
                 </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+                <div className="space-y-1.5">
+                  <Label>Tipo de receita</Label>
+                  <Select value={form.tipo_receita} onValueChange={v => setForm(f => ({ ...f, tipo_receita: v }))}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {tiposReceita.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </>
+            )}
 
-      {/* Form Conta a Pagar */}
-      <Dialog open={showContaPagarForm} onOpenChange={setShowContaPagarForm}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Nova Conta a Pagar</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div>
-              <Label>Descrição *</Label>
-              <Input
-                value={contaPagarForm.descricao}
-                onChange={(e) => setContaPagarForm({ ...contaPagarForm, descricao: e.target.value })}
-                placeholder="Ex: Compra de ingredientes"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
+            {/* Campos dinâmicos: DESPESA */}
+            {form.tipo === 'despesa' && (
+              <>
+                <div className="space-y-1.5">
+                  <Label>Descrição *</Label>
+                  <Input placeholder="Ex: Compra de ingredientes" value={form.descricao}
+                    onChange={e => setForm(f => ({ ...f, descricao: e.target.value }))} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Categoria</Label>
+                  <Select value={form.categoria} onValueChange={v => setForm(f => ({ ...f, categoria: v }))}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {categoriasDespesa.map(c => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Fornecedor</Label>
+                  <Input placeholder="Nome do fornecedor (opcional)" value={form.fornecedor}
+                    onChange={e => setForm(f => ({ ...f, fornecedor: e.target.value }))} />
+                </div>
+              </>
+            )}
+
+            {/* Campos comuns */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
                 <Label>Valor *</Label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  value={contaPagarForm.valor}
-                  onChange={(e) => setContaPagarForm({ ...contaPagarForm, valor: e.target.value })}
-                  placeholder="0,00"
-                />
+                <Input type="number" step="0.01" placeholder="0,00" value={form.valor}
+                  onChange={e => setForm(f => ({ ...f, valor: e.target.value }))} />
               </div>
-              <div>
-                <Label>Categoria</Label>
-                <Select
-                  value={contaPagarForm.categoria}
-                  onValueChange={(value) => setContaPagarForm({ ...contaPagarForm, categoria: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {categoriasPagar.map((cat) => (
-                      <SelectItem key={cat.value} value={cat.value}>
-                        {cat.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>Fornecedor</Label>
-                <Input
-                  value={contaPagarForm.fornecedor}
-                  onChange={(e) => setContaPagarForm({ ...contaPagarForm, fornecedor: e.target.value })}
-                />
-              </div>
-              <div>
-                <Label>Data de Vencimento</Label>
-                <Input
-                  type="date"
-                  value={contaPagarForm.data_vencimento}
-                  onChange={(e) => setContaPagarForm({ ...contaPagarForm, data_vencimento: e.target.value })}
-                />
+              <div className="space-y-1.5">
+                <Label>Data de vencimento</Label>
+                <Input type="date" value={form.data_vencimento}
+                  onChange={e => setForm(f => ({ ...f, data_vencimento: e.target.value }))} />
               </div>
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowContaPagarForm(false)}>
-              Cancelar
-            </Button>
-            <Button
-              onClick={() => createContaPagar.mutate(contaPagarForm)}
-              disabled={!contaPagarForm.descricao || !contaPagarForm.valor || createContaPagar.isPending}
-              className="bg-rose-500 hover:bg-rose-600"
-            >
-              {createContaPagar.isPending ? 'Salvando...' : 'Salvar'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
-      {/* Form Conta a Receber */}
-      <Dialog open={showContaReceberForm} onOpenChange={setShowContaReceberForm}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Nova Conta a Receber</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div>
-              <Label>Cliente</Label>
-              <Input
-                value={contaReceberForm.cliente_nome}
-                onChange={(e) => setContaReceberForm({ ...contaReceberForm, cliente_nome: e.target.value })}
-                placeholder="Nome do cliente"
-              />
-            </div>
-            <div>
-              <Label>Descrição</Label>
-              <Input
-                value={contaReceberForm.descricao}
-                onChange={(e) => setContaReceberForm({ ...contaReceberForm, descricao: e.target.value })}
-                placeholder="Ex: Pagamento final do pedido"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>Valor *</Label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  value={contaReceberForm.valor}
-                  onChange={(e) => setContaReceberForm({ ...contaReceberForm, valor: e.target.value })}
-                  placeholder="0,00"
-                />
-              </div>
-              <div>
-                <Label>Tipo</Label>
-                <Select
-                  value={contaReceberForm.tipo}
-                  onValueChange={(value) => setContaReceberForm({ ...contaReceberForm, tipo: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {tiposReceber.map((t) => (
-                      <SelectItem key={t.value} value={t.value}>
-                        {t.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div>
-              <Label>Data de Vencimento</Label>
-              <Input
-                type="date"
-                value={contaReceberForm.data_vencimento}
-                onChange={(e) => setContaReceberForm({ ...contaReceberForm, data_vencimento: e.target.value })}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowContaReceberForm(false)}>
-              Cancelar
-            </Button>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setShowForm(false)}>Cancelar</Button>
             <Button
-              onClick={() => createContaReceber.mutate(contaReceberForm)}
-              disabled={!contaReceberForm.valor || createContaReceber.isPending}
-              className="bg-rose-500 hover:bg-rose-600"
+              onClick={handleSave}
+              disabled={
+                isSaving ||
+                !form.valor ||
+                (form.tipo === 'despesa' && !form.descricao) ||
+                (form.tipo === 'receita' && !form.cliente_nome && !form.descricao)
+              }
+              className="bg-rose-500 hover:bg-rose-600 text-white"
             >
-              {createContaReceber.isPending ? 'Salvando...' : 'Salvar'}
+              {isSaving ? 'Salvando...' : 'Salvar'}
             </Button>
           </DialogFooter>
         </DialogContent>

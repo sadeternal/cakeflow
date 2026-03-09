@@ -3,6 +3,16 @@ import { appClient } from '@/api/appClient';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { CreditCard, Clock, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale/pt-BR';
@@ -11,6 +21,8 @@ import { toast } from 'sonner';
 export default function AssinaturasTab({ confeitaria, onUpdate }) {
   const [loading, setLoading] = useState(false);
   const [checkoutProcessed, setCheckoutProcessed] = useState(false);
+  const [showCancelDialog, setShowCancelDialog] = useState(false);
+  const [canceling, setCanceling] = useState(false);
 
   useEffect(() => {
     const handleCheckoutSuccess = async () => {
@@ -177,6 +189,29 @@ export default function AssinaturasTab({ confeitaria, onUpdate }) {
     }
   };
 
+  const handleCancelSubscription = async () => {
+    setCanceling(true);
+    try {
+      await appClient.functions.invoke('cancelSubscription', {
+        confeitaria_id: confeitaria.id
+      });
+      const accessUntil = confeitaria?.data_proximo_pagamento
+        ? format(new Date(confeitaria.data_proximo_pagamento), "d 'de' MMMM 'de' yyyy", { locale: ptBR })
+        : null;
+      toast.success(
+        accessUntil
+          ? `Assinatura cancelada. Seu acesso continua até ${accessUntil}.`
+          : 'Assinatura cancelada com sucesso.'
+      );
+      setShowCancelDialog(false);
+      if (onUpdate) await onUpdate();
+    } catch (error) {
+      toast.error('Erro ao cancelar: ' + error.message);
+    } finally {
+      setCanceling(false);
+    }
+  };
+
   if (!confeitaria) {
     return (
       <div className="flex items-center justify-center p-12">
@@ -295,20 +330,32 @@ export default function AssinaturasTab({ confeitaria, onUpdate }) {
           </div>
 
           <div className="pt-4 border-t space-y-2">
-            <Button
-              type="button"
-              onClick={handleOpenBilling}
-              disabled={loading}
-              className="w-full bg-gradient-to-r from-rose-500 to-rose-600"
-            >
-              {loading
-                ? 'Processando...'
-                : hasOngoingSubscription
-                  ? 'Gerenciar Assinatura'
-                  : status === 'canceled'
-                    ? 'Assinar Novamente'
-                    : 'Assinar o Plano'}
-            </Button>
+            {status === 'active' ? (
+              <Button
+                type="button"
+                onClick={() => setShowCancelDialog(true)}
+                disabled={loading}
+                variant="destructive"
+                className="w-full"
+              >
+                Cancelar Assinatura
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                onClick={handleOpenBilling}
+                disabled={loading}
+                className="w-full bg-gradient-to-r from-rose-500 to-rose-600"
+              >
+                {loading
+                  ? 'Processando...'
+                  : status === 'canceling' || status === 'past_due'
+                    ? 'Gerenciar Assinatura'
+                    : status === 'canceled'
+                      ? 'Assinar Novamente'
+                      : 'Assinar o Plano'}
+              </Button>
+            )}
             {hasOngoingSubscription && !confeitaria?.data_proximo_pagamento && (
               <Button
                 type="button"
@@ -324,6 +371,36 @@ export default function AssinaturasTab({ confeitaria, onUpdate }) {
           </div>
         </CardContent>
       </Card>
+      <AlertDialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cancelar assinatura?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {confeitaria?.data_proximo_pagamento ? (
+                <>
+                  Seu acesso continuará ativo até{' '}
+                  <strong>
+                    {format(new Date(confeitaria.data_proximo_pagamento), "d 'de' MMMM 'de' yyyy", { locale: ptBR })}
+                  </strong>
+                  . Após essa data, será necessário assinar novamente para continuar usando o sistema.
+                </>
+              ) : (
+                'Após o cancelamento, será necessário assinar novamente para continuar usando o sistema.'
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={canceling}>Manter assinatura</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleCancelSubscription}
+              disabled={canceling}
+              className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
+            >
+              {canceling ? 'Cancelando...' : 'Sim, cancelar'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

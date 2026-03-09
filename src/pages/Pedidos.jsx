@@ -136,17 +136,22 @@ export default function Pedidos() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row gap-4 justify-between">
-        <div className="flex flex-col sm:flex-row gap-3 flex-1">
-          <div className="relative flex-1 max-w-md">
+      <div className="flex flex-col gap-3 sm:flex-row sm:gap-4 sm:justify-between">
+
+        {/* Filtros */}
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-1">
+          {/* Busca */}
+          <div className="relative flex-1 sm:max-w-md">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <Input
               placeholder="Buscar por cliente ou número..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="pl-10 h-11 border-gray-200"
+              className="pl-10 h-11 border-gray-200 w-full"
             />
           </div>
+
+          {/* Status */}
           <Select value={statusFilter} onValueChange={setStatusFilter}>
             <SelectTrigger className="w-full sm:w-48 h-11">
               <Filter className="w-4 h-4 mr-2 text-gray-400" />
@@ -159,19 +164,21 @@ export default function Pedidos() {
               ))}
             </SelectContent>
           </Select>
+
+          {/* Datas */}
           <div className="flex items-center gap-2">
             <input
               type="date"
               value={dataInicio}
               onChange={e => setDataInicio(e.target.value)}
-              className="h-11 border border-gray-200 rounded-md px-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-rose-300"
+              className="flex-1 h-11 border border-gray-200 rounded-md px-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-rose-300 min-w-0"
             />
             <span className="text-gray-400 text-sm shrink-0">até</span>
             <input
               type="date"
               value={dataFim}
               onChange={e => setDataFim(e.target.value)}
-              className="h-11 border border-gray-200 rounded-md px-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-rose-300"
+              className="flex-1 h-11 border border-gray-200 rounded-md px-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-rose-300 min-w-0"
             />
             {(dataInicio || dataFim) && (
               <button
@@ -183,6 +190,8 @@ export default function Pedidos() {
             )}
           </div>
         </div>
+
+        {/* Calendário + Novo Pedido */}
         <div className="flex items-center gap-2">
           <Button
             variant={vistaCalendario ? 'default' : 'outline'}
@@ -196,8 +205,8 @@ export default function Pedidos() {
           >
             {vistaCalendario ? <List className="w-5 h-5" /> : <CalendarDays className="w-5 h-5" />}
           </Button>
-          <Link to={createPageUrl('NovoPedido')}>
-            <Button className="w-full sm:w-auto h-11 bg-gradient-to-r from-rose-500 to-rose-600 hover:from-rose-600 hover:to-rose-700 shadow-lg shadow-rose-200">
+          <Link to={createPageUrl('NovoPedido')} className="flex-1 sm:flex-none">
+            <Button className="w-full h-11 bg-gradient-to-r from-rose-500 to-rose-600 hover:from-rose-600 hover:to-rose-700 shadow-lg shadow-rose-200">
               <Plus className="w-4 h-4 mr-2" />
               Novo Pedido
             </Button>

@@ -117,6 +117,15 @@ export default function Configuracoes() {
   const [activeTab, setActiveTab] = useState(urlParams.get('tab') || 'geral');
   const queryClient = useQueryClient();
 
+  const HIDE_CHECKLIST_KEY = 'cakeflow_ocultar_primeiros_passos';
+  const [ocultarChecklist, setOcultarChecklist] = useState(
+    () => localStorage.getItem(HIDE_CHECKLIST_KEY) === 'true'
+  );
+  const toggleOcultarChecklist = (val) => {
+    setOcultarChecklist(val);
+    localStorage.setItem(HIDE_CHECKLIST_KEY, val ? 'true' : 'false');
+  };
+
   // Form states
   const [confeitariaForm, setConfeitariaForm] = useState({
     nome: '',
@@ -755,14 +764,38 @@ export default function Configuracoes() {
                 </div>
               </div>
 
-              <Button
-                onClick={() => updateConfeitaria.mutate()}
-                disabled={updateConfeitaria.isPending || !confeitaria?.id}
-                className="bg-rose-500 hover:bg-rose-600"
-              >
-                <Save className="w-4 h-4 mr-2" />
-                {updateConfeitaria.isPending ? 'Salvando...' : 'Salvar Alterações'}
-              </Button>
+            </CardContent>
+          </Card>
+
+          {/* Preferências do Dashboard */}
+          <Card className="border-0 shadow-lg shadow-gray-100/50">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Settings2 className="w-4 h-4" />
+                Preferências do Dashboard
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-900">Ocultar "Primeiros Passos"</p>
+                  <p className="text-xs text-gray-500 mt-0.5">Esconde o checklist de configuração inicial no Dashboard</p>
+                </div>
+                <Switch
+                  checked={ocultarChecklist}
+                  onCheckedChange={toggleOcultarChecklist}
+                />
+              </div>
+              <div className="pt-2 border-t">
+                <Button
+                  onClick={() => updateConfeitaria.mutate()}
+                  disabled={updateConfeitaria.isPending || !confeitaria?.id}
+                  className="bg-rose-500 hover:bg-rose-600"
+                >
+                  <Save className="w-4 h-4 mr-2" />
+                  {updateConfeitaria.isPending ? 'Salvando...' : 'Salvar Alterações'}
+                </Button>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>

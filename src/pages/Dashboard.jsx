@@ -122,7 +122,9 @@ export default function Dashboard() {
   return (
     <div className="space-y-8">
       {/* Onboarding Checklist */}
-      {user && confeitaria && user.onboarding_finalizado !== true && (
+      {user && confeitaria &&
+        user.onboarding_finalizado !== true &&
+        localStorage.getItem('cakeflow_ocultar_primeiros_passos') !== 'true' && (
         <OnboardingChecklist user={user} confeitaria={confeitaria} />
       )}
 
