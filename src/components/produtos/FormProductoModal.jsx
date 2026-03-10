@@ -59,12 +59,16 @@ export default function FormProductoModal({ open, onOpenChange, editingProduto, 
   useEffect(() => {
     if (!open) return;
 
+    const safeCategorias = Array.isArray(categorias) && categorias.length > 0 ? categorias : DEFAULT_CATEGORIAS;
+    const defaultCategoria = safeCategorias[0]?.value || 'bolo';
+
     if (editingProduto) {
+      const categoriaExiste = safeCategorias.some(c => c.value === editingProduto.categoria);
       setFormData({
         nome: editingProduto.nome || '',
         descricao: editingProduto.descricao || '',
         preco: editingProduto.preco?.toString() || '',
-        categoria: editingProduto.categoria || 'bolo',
+        categoria: (categoriaExiste ? editingProduto.categoria : null) || defaultCategoria,
         foto_url: editingProduto.foto_url || '',
         disponivel: editingProduto.disponivel !== false,
       });
@@ -76,12 +80,12 @@ export default function FormProductoModal({ open, onOpenChange, editingProduto, 
       });
       setComplementos(slots);
     } else {
-      setFormData(FORM_INICIAL);
+      setFormData({ ...FORM_INICIAL, categoria: defaultCategoria });
       setComplementos(Array.from({ length: maxComplementos }, () => ({ nome: '', valor: '', ativo: false })));
     }
 
     setActiveTab('dados');
-  }, [open, editingProduto]);
+  }, [open, editingProduto, categorias]);
 
   const toggleComplemento = (index) => {
     setComplementos((prev) =>
@@ -223,11 +227,13 @@ export default function FormProductoModal({ open, onOpenChange, editingProduto, 
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {categorias.map((cat) => (
-                      <SelectItem key={cat.value} value={cat.value}>
-                        {cat.label}
-                      </SelectItem>
-                    ))}
+                    {(Array.isArray(categorias) && categorias.length > 0 ? categorias : DEFAULT_CATEGORIAS)
+                      .filter(cat => cat?.value)
+                      .map((cat) => (
+                        <SelectItem key={cat.value} value={cat.value}>
+                          {cat.label}
+                        </SelectItem>
+                      ))}
                   </SelectContent>
                 </Select>
               </div>
