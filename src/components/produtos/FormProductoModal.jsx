@@ -55,6 +55,7 @@ export default function FormProductoModal({ open, onOpenChange, editingProduto, 
   const [activeTab, setActiveTab] = useState('dados');
   const [formData, setFormData] = useState(FORM_INICIAL);
   const [complementos, setComplementos] = useState([]);
+  const [limiteComplementos, setLimiteComplementos] = useState(null);
 
   useEffect(() => {
     if (!open) return;
@@ -68,6 +69,7 @@ export default function FormProductoModal({ open, onOpenChange, editingProduto, 
         foto_url: editingProduto.foto_url || '',
         disponivel: editingProduto.disponivel !== false,
       });
+      setLimiteComplementos(editingProduto.limite_complementos ?? null);
 
       const saved = Array.isArray(editingProduto.complementos) ? editingProduto.complementos : [];
       const slots = Array.from({ length: maxComplementos }, () => ({ nome: '', valor: '', ativo: false }));
@@ -77,6 +79,7 @@ export default function FormProductoModal({ open, onOpenChange, editingProduto, 
       setComplementos(slots);
     } else {
       setFormData(FORM_INICIAL);
+      setLimiteComplementos(null);
       setComplementos(Array.from({ length: maxComplementos }, () => ({ nome: '', valor: '', ativo: false })));
     }
 
@@ -128,6 +131,7 @@ export default function FormProductoModal({ open, onOpenChange, editingProduto, 
       ...formData,
       preco: parseFloat(formData.preco) || 0,
       complementos: complementosFiltrados,
+      limite_complementos: limiteComplementos ? Math.min(maxComplementos, Math.max(1, Number(limiteComplementos))) : null,
     });
   };
 
@@ -284,6 +288,25 @@ export default function FormProductoModal({ open, onOpenChange, editingProduto, 
               <p className="text-sm text-blue-900">
                 Adicione até {maxComplementos} complementos opcionais. Clientes poderão escolher quais desejam ao adicionar ao carrinho.
               </p>
+            </div>
+
+            <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+              <div className="flex-1">
+                <p className="text-sm font-medium text-gray-900">Limite de seleção pelo cliente</p>
+                <p className="text-xs text-gray-500 mt-0.5">Quantos complementos o cliente pode escolher. Deixe em branco para usar o padrão global.</p>
+              </div>
+              <Input
+                type="number"
+                min={1}
+                max={maxComplementos}
+                className="w-20 h-8 text-center"
+                value={limiteComplementos ?? ''}
+                placeholder="—"
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setLimiteComplementos(val === '' ? null : Math.min(maxComplementos, Math.max(1, parseInt(val) || 1)));
+                }}
+              />
             </div>
 
             <div className="space-y-3">
