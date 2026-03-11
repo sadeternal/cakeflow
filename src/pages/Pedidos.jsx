@@ -16,7 +16,8 @@ import {
   ChevronDown,
   MessageCircle,
   ArrowRight,
-  Pencil
+  Pencil,
+  ShoppingBag
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -47,6 +48,28 @@ import { cn } from '@/lib/utils';
 import PedidoDetalhes from '@/components/pedidos/PedidoDetalhes';
 import CalendarioPedidos from '@/components/pedidos/CalendarioPedidos';
 import DiaDoPedidoDialog from '@/components/pedidos/DiaDoPedidoDialog';
+import { useRegisterTour } from '@/lib/TourContext';
+
+const PEDIDOS_TOUR_SLIDES = [
+  {
+    icon: ShoppingBag,
+    title: 'Seus Pedidos em Um Só Lugar',
+    description: 'Aqui você acompanha todos os pedidos da sua confeitaria. Cada pedido passa por etapas: Orçamento → Aprovado → Em Produção → Pronto → Entregue. Você pode filtrar por status ou período para encontrar o que precisa.',
+    highlight: 'Use o filtro de status no topo para focar apenas nos pedidos relevantes.',
+  },
+  {
+    icon: Plus,
+    title: 'Criando e Gerenciando Pedidos',
+    description: 'Clique em "Novo Pedido" para registrar uma encomenda. Você pode criar pedidos de produtos prontos do catálogo ou pedidos personalizados. Ao clicar em um pedido, você vê todos os detalhes e pode avançar o status.',
+    highlight: 'O número do pedido é gerado automaticamente pelo sistema.',
+  },
+  {
+    icon: CalendarDays,
+    title: 'Filtros e Vista de Calendário',
+    description: 'Além da lista, alterne para a vista de calendário para ver as entregas do mês de forma visual. Use as datas de início e fim para filtrar pedidos por período. O botão de WhatsApp em cada pedido abre a conversa diretamente com o cliente.',
+    highlight: 'A vista de calendário é ideal para planejar a produção semanal.',
+  },
+];
 
 const statusConfig = {
   orcamento: { label: 'Orçamento', color: 'bg-gray-100 text-gray-700 border-gray-200', next: 'aprovado' },
@@ -59,6 +82,7 @@ const statusConfig = {
 
 export default function Pedidos() {
   const { user } = useAuth();
+  useRegisterTour('pedidos', PEDIDOS_TOUR_SLIDES, !!user);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('todos');
   const [selectedPedido, setSelectedPedido] = useState(null);
@@ -191,7 +215,7 @@ export default function Pedidos() {
           </div>
         </div>
 
-        {/* Calendário + Novo Pedido */}
+        {/* Calendário + Novo Pedido + Tour */}
         <div className="flex items-center gap-2">
           <Button
             variant={vistaCalendario ? 'default' : 'outline'}

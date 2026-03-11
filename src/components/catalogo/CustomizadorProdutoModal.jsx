@@ -24,6 +24,7 @@ export default function CustomizadorProdutoModal({
   onAdicionar,
   initialSelecionados = [],
   initialQuantidade = 1,
+  maxComplementos = 4,
 }) {
   const [selecionados, setSelecionados] = useState([]);
   const [quantidade, setQuantidade] = useState(1);
@@ -49,9 +50,11 @@ export default function CustomizadorProdutoModal({
   const precoTotal = precoUnitario * quantidade;
 
   const toggleComplemento = (nome) => {
-    setSelecionados((prev) =>
-      prev.includes(nome) ? prev.filter((n) => n !== nome) : [...prev, nome]
-    );
+    setSelecionados((prev) => {
+      if (prev.includes(nome)) return prev.filter((n) => n !== nome);
+      if (prev.length >= maxComplementos) return prev;
+      return [...prev, nome];
+    });
   };
 
   const handleAdicionar = () => {
@@ -114,27 +117,34 @@ export default function CustomizadorProdutoModal({
           {/* Complementos */}
           {complementos.length > 0 && (
             <div>
-              <p className="text-sm font-semibold text-gray-700 mb-2">Complementos Disponíveis</p>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-sm font-semibold text-gray-700">Complementos Disponíveis</p>
+                <span className="text-xs text-gray-400">{selecionados.length}/{maxComplementos} selecionados</span>
+              </div>
               <div className="space-y-2">
                 {complementos.map((c, i) => {
                   const checked = selecionados.includes(c.nome);
+                  const limitReached = !checked && selecionados.length >= maxComplementos;
                   return (
                     <div
                       key={i}
-                      className={`flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-colors select-none ${
-                        checked
-                          ? 'bg-rose-50 border-rose-200'
-                          : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
+                      className={`flex items-center justify-between p-3 rounded-lg border transition-colors select-none ${
+                        limitReached
+                          ? 'bg-gray-50 border-gray-100 opacity-40 cursor-not-allowed'
+                          : checked
+                          ? 'bg-rose-50 border-rose-200 cursor-pointer'
+                          : 'bg-gray-50 border-gray-200 hover:bg-gray-100 cursor-pointer'
                       }`}
-                      onClick={() => toggleComplemento(c.nome)}
+                      onClick={() => !limitReached && toggleComplemento(c.nome)}
                     >
                       <div className="flex items-center gap-2.5">
                         <Checkbox
                           checked={checked}
-                          onCheckedChange={() => toggleComplemento(c.nome)}
+                          disabled={limitReached}
+                          onCheckedChange={() => !limitReached && toggleComplemento(c.nome)}
                           onClick={(e) => e.stopPropagation()}
                         />
-                        <Label className="cursor-pointer font-medium text-sm">{c.nome}</Label>
+                        <Label className={`font-medium text-sm ${limitReached ? '' : 'cursor-pointer'}`}>{c.nome}</Label>
                       </div>
                       <span className="text-sm font-semibold text-rose-600 shrink-0 ml-4">
                         + R$ {fmt(parseFloat(c.valor) || 0)}
@@ -143,6 +153,9 @@ export default function CustomizadorProdutoModal({
                   );
                 })}
               </div>
+              {selecionados.length >= maxComplementos && (
+                <p className="text-xs text-amber-600 mt-2">Limite de {maxComplementos} complemento{maxComplementos !== 1 ? 's' : ''} atingido.</p>
+              )}
             </div>
           )}
 

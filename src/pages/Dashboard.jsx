@@ -22,7 +22,50 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import OnboardingChecklist from '@/components/dashboard/OnboardingChecklist';
+import { useRegisterTour } from '@/lib/TourContext';
+
+const WELCOME_TOUR_SLIDES = [
+  {
+    icon: Store,
+    title: 'Bem-vinda ao CakeFlow!',
+    description: 'Para tornar sua experiência melhor, posso exibir um ícone de ajuda (?) na barra superior em cada página do sistema. Ao clicar, você vê um tour rápido com as principais funcionalidades daquela área.',
+    isChoiceSlide: true,
+  },
+  {
+    icon: Store,
+    title: 'Seu sistema de gestão',
+    description: 'Aqui você controla pedidos, clientes, produtos, finanças e ainda tem um catálogo público para seus clientes. Deixa eu te mostrar o que cada área faz.',
+    highlight: 'Você pode rever este tour a qualquer momento clicando no ícone ? na barra superior.',
+  },
+  {
+    icon: ShoppingBag,
+    title: 'Pedidos',
+    description: 'Registre todas as encomendas da sua confeitaria. Cada pedido tem um fluxo de status (Orçamento → Produção → Entregue), data de entrega, horário e valor. O sistema gera o número do pedido automaticamente.',
+    highlight: 'Novos pedidos também podem vir pelo catálogo público se você ativar essa opção.',
+  },
+  {
+    icon: Users,
+    title: 'Clientes',
+    description: 'Mantenha um cadastro organizado dos seus clientes com histórico completo de pedidos. Quanto mais informações você registrar, mais fácil será o atendimento personalizado e o recontato para novas encomendas.',
+  },
+  {
+    icon: Package,
+    title: 'Produtos',
+    description: 'Configure o que você vende: produtos prontos com preço fixo e produtos personalizados por tamanho e recheio. Os produtos prontos aparecem automaticamente no seu catálogo público para os clientes verem.',
+  },
+  {
+    icon: DollarSign,
+    title: 'Financeiro e Relatórios',
+    description: 'Registre entradas e saídas e acompanhe o saldo mês a mês em Financeiro. Em Relatórios, veja o faturamento consolidado, ticket médio e os produtos mais vendidos — tudo para você tomar decisões com mais segurança.',
+    highlight: 'O saldo do Financeiro e o faturamento dos Relatórios são calculados de formas diferentes — ambos são úteis.',
+  },
+  {
+    icon: ExternalLink,
+    title: 'Seu Catálogo Público',
+    description: 'Sua confeitaria tem um catálogo público com link único que você pode compartilhar no WhatsApp, Instagram ou onde preferir. Seus clientes veem seus produtos, fotos e podem até fazer pedidos direto pelo catálogo.',
+    highlight: 'O link do catálogo aparece no topo do Dashboard — compartilhe com seus clientes!',
+  },
+];
 
 const StatCard = ({ title, value, icon: Icon, color, trend, subtitle }) =>
 <Card className="border-0 shadow-lg shadow-gray-100/50 overflow-hidden">
@@ -60,6 +103,7 @@ const statusLabels = {
 
 export default function Dashboard() {
   const { user } = useAuth();
+  useRegisterTour('welcome', WELCOME_TOUR_SLIDES, !!user);
 
   useEffect(() => {
     if (user && !user.confeitaria_id) {
@@ -121,13 +165,6 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-8">
-      {/* Onboarding Checklist */}
-      {user && confeitaria &&
-        user.onboarding_finalizado !== true &&
-        localStorage.getItem('cakeflow_ocultar_primeiros_passos') !== 'true' && (
-        <OnboardingChecklist user={user} confeitaria={confeitaria} />
-      )}
-
       {/* Catálogo Público */}
       {confeitaria?.slug && (() => {
         const catalogUrl = createCatalogUrl(confeitaria.slug);

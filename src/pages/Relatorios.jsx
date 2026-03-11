@@ -16,12 +16,35 @@ import {
   Eye,
   Users,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  BarChart2
 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { useRegisterTour } from '@/lib/TourContext';
+
+const RELATORIOS_TOUR_SLIDES = [
+  {
+    icon: TrendingUp,
+    title: 'Entendendo seu Negócio',
+    description: 'A página de Relatórios reúne os principais indicadores: faturamento, número de pedidos, ticket médio e crescimento mês a mês. Use a navegação de meses para comparar períodos.',
+    highlight: 'Acesse os relatórios todo mês para tomar decisões baseadas em dados.',
+  },
+  {
+    icon: BarChart2,
+    title: 'Gráficos de Faturamento',
+    description: 'Os gráficos mostram a evolução do faturamento nos últimos meses e a divisão entre receitas e despesas. O gráfico de linha exibe a tendência, enquanto o de barras facilita comparações entre períodos.',
+    highlight: 'Picos no gráfico geralmente correspondem a datas comemorativas — planeje com antecedência.',
+  },
+  {
+    icon: Award,
+    title: 'Produtos Mais Vendidos',
+    description: 'A aba Analytics mostra quais produtos geram mais receita e quantas visualizações seu catálogo público recebeu. Identifique os produtos favoritos dos clientes e otimize seu cardápio com base no que realmente vende.',
+    highlight: 'Produtos com alta visualização e baixa venda podem precisar de melhor descrição ou preço.',
+  },
+];
 import {
   LineChart,
   Line,
@@ -42,6 +65,7 @@ const COLORS = ['#ec4899', '#f97316', '#8b5cf6', '#06b6d4', '#84cc16', '#f59e0b'
 
 export default function Relatorios() {
   const { user } = useAuth();
+  useRegisterTour('relatorios', RELATORIOS_TOUR_SLIDES, !!user);
   const [mesSelecionado, setMesSelecionado] = useState(new Date());
 
   useEffect(() => {
@@ -295,9 +319,11 @@ export default function Relatorios() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">Relatórios e Análises</h1>
-        <p className="text-gray-500">Visão geral do desempenho do seu negócio</p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">Relatórios e Análises</h1>
+          <p className="text-gray-500">Visão geral do desempenho do seu negócio</p>
+        </div>
       </div>
 
       {/* Tabs */}

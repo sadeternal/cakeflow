@@ -39,9 +39,32 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { useRegisterTour } from '@/lib/TourContext';
+
+const CLIENTES_TOUR_SLIDES = [
+  {
+    icon: User,
+    title: 'Sua Base de Clientes',
+    description: 'Cadastre seus clientes com nome, telefone, CPF, e-mail e endereço. Quanto mais completo o cadastro, mais fácil será buscar histórico e enviar mensagens. Os dados ficam vinculados à sua confeitaria.',
+    highlight: 'Clientes cadastrados aqui ficam disponíveis no formulário de novo pedido.',
+  },
+  {
+    icon: ShoppingBag,
+    title: 'Histórico de Pedidos',
+    description: 'Ao clicar em um cliente na lista, um painel lateral abre mostrando todos os pedidos anteriores desse cliente. Isso ajuda a entender o que ele costuma pedir e o valor acumulado dos seus pedidos.',
+    highlight: 'Use o painel lateral para personalizar o atendimento com base no histórico.',
+  },
+  {
+    icon: Search,
+    title: 'Encontre Clientes Rapidamente',
+    description: 'A busca funciona por nome, telefone ou e-mail. O resultado filtra em tempo real enquanto você digita. Para editar ou excluir um cliente, use os ícones que aparecem ao passar o mouse sobre o card.',
+    highlight: 'Manter os telefones atualizados facilita o contato direto via WhatsApp.',
+  },
+];
 
 export default function Clientes() {
   const { user } = useAuth();
+  useRegisterTour('clientes', CLIENTES_TOUR_SLIDES, !!user);
   const { toast } = useToast();
   const { trackEvent } = useEventTracker();
   const [search, setSearch] = useState('');
@@ -265,13 +288,15 @@ export default function Clientes() {
             className="pl-10 h-11 border-gray-200"
           />
         </div>
-        <Button
-          onClick={() => setShowForm(true)}
-          className="h-11 bg-gradient-to-r from-rose-500 to-rose-600 hover:from-rose-600 hover:to-rose-700 shadow-lg shadow-rose-200"
-        >
-          <Plus className="w-4 h-4 mr-2" />
-          Novo Cliente
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            onClick={() => setShowForm(true)}
+            className="h-11 bg-gradient-to-r from-rose-500 to-rose-600 hover:from-rose-600 hover:to-rose-700 shadow-lg shadow-rose-200"
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            Novo Cliente
+          </Button>
+        </div>
       </div>
 
       {/* Clientes List */}

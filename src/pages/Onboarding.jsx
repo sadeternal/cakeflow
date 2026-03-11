@@ -132,6 +132,9 @@ export default function Onboarding() {
     },
     onSuccess: (createdConfeitaria) => {
       window.localStorage.removeItem('cakeflow_onboarding_prefill');
+      // Garante que o tour de boas-vindas sempre apareça para novos usuários
+      window.localStorage.removeItem('cakeflow_tour_welcome_visto');
+      window.localStorage.removeItem('cakeflow_tour_icons_enabled');
       toast({
         title: 'Cadastro concluído',
         description: 'Seu trial gratuito de 7 dias começou. Você pode assinar depois em Configurações > Assinaturas.'

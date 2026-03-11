@@ -508,6 +508,7 @@ export default function Catalogo() {
         onAdicionar={adicionarComComplementos}
         initialSelecionados={editandoItemCarrinho?.complementos_selecionados?.map(c => c.nome) ?? []}
         initialQuantidade={editandoItemCarrinho?.quantidade ?? 1}
+        maxComplementos={produtoCustomizando?.limite_complementos ?? confeitaria?.max_complementos_produto ?? 4}
       />
 
       {/* Modal Pedido Personalizado */}

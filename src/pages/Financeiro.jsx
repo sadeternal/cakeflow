@@ -7,7 +7,8 @@ import { format, parseISO, startOfMonth, endOfMonth, isWithinInterval, addMonths
 import { ptBR } from 'date-fns/locale';
 import {
   TrendingUp, TrendingDown, DollarSign, Plus, Check, Trash2,
-  ArrowUpCircle, ArrowDownCircle, ChevronLeft, ChevronRight
+  ArrowUpCircle, ArrowDownCircle, ChevronLeft, ChevronRight,
+  CalendarDays, CheckCircle
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -20,6 +21,28 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
 import { toast } from 'sonner';
+import { useRegisterTour } from '@/lib/TourContext';
+
+const FINANCEIRO_TOUR_SLIDES = [
+  {
+    icon: DollarSign,
+    title: 'Controle Financeiro Completo',
+    description: 'Registre entradas (receitas) e saídas (despesas) da sua confeitaria. As receitas podem ser sinal ou pagamento final de pedidos. As despesas cobrem ingredientes, embalagens, aluguel e outros custos fixos.',
+    highlight: 'Registre todas as movimentações para ter uma visão real do seu lucro.',
+  },
+  {
+    icon: CalendarDays,
+    title: 'Navegando pelos Meses',
+    description: 'Use as setas ou os seletores no topo para navegar entre meses e ver o histórico financeiro. O resumo do mês mostra total de receitas, despesas e o saldo líquido.',
+    highlight: 'Compare meses diferentes para identificar sazonalidade no seu negócio.',
+  },
+  {
+    icon: CheckCircle,
+    title: 'Acompanhando Pagamentos',
+    description: 'Cada lançamento tem um status (pago ou pendente). Filtre por tipo (receita/despesa) para focar no que precisa de atenção. Lançamentos pendentes ficam destacados para facilitar a cobrança ou controle de contas a vencer.',
+    highlight: 'Mantenha os pagamentos recebidos marcados como pagos para o saldo ser preciso.',
+  },
+];
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
@@ -93,6 +116,7 @@ const inMonth = (dateStr, inicio, fim) => {
 
 export default function Financeiro() {
   const { user } = useAuth();
+  useRegisterTour('financeiro', FINANCEIRO_TOUR_SLIDES, !!user);
   const queryClient = useQueryClient();
 
   const today = new Date();
@@ -380,13 +404,15 @@ export default function Financeiro() {
           </button>
         </div>
 
-        <Button
-          onClick={() => { setForm(makeEmptyForm()); setClienteManual(false); setShowForm(true); }}
-          className="bg-rose-500 hover:bg-rose-600 text-white gap-2 hidden sm:flex"
-        >
-          <Plus className="w-4 h-4" />
-          Novo Lançamento
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            onClick={() => { setForm(makeEmptyForm()); setClienteManual(false); setShowForm(true); }}
+            className="bg-rose-500 hover:bg-rose-600 text-white gap-2 hidden sm:flex"
+          >
+            <Plus className="w-4 h-4" />
+            Novo Lançamento
+          </Button>
+        </div>
       </div>
 
       {/* ── Cards de resumo ── */}

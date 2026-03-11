@@ -117,13 +117,13 @@ export default function Configuracoes() {
   const [activeTab, setActiveTab] = useState(urlParams.get('tab') || 'geral');
   const queryClient = useQueryClient();
 
-  const HIDE_CHECKLIST_KEY = 'cakeflow_ocultar_primeiros_passos';
-  const [ocultarChecklist, setOcultarChecklist] = useState(
-    () => localStorage.getItem(HIDE_CHECKLIST_KEY) === 'true'
+  const TOUR_ICONS_KEY = 'cakeflow_tour_icons_enabled';
+  const [tourIconsEnabled, setTourIconsEnabled] = useState(
+    () => localStorage.getItem(TOUR_ICONS_KEY) !== 'false'
   );
-  const toggleOcultarChecklist = (val) => {
-    setOcultarChecklist(val);
-    localStorage.setItem(HIDE_CHECKLIST_KEY, val ? 'true' : 'false');
+  const toggleTourIcons = (val) => {
+    setTourIconsEnabled(val);
+    localStorage.setItem(TOUR_ICONS_KEY, val ? 'true' : 'false');
   };
 
   // Form states
@@ -778,12 +778,12 @@ export default function Configuracoes() {
             <CardContent className="space-y-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-900">Ocultar "Primeiros Passos"</p>
-                  <p className="text-xs text-gray-500 mt-0.5">Esconde o checklist de configuração inicial no Dashboard</p>
+                  <p className="text-sm font-medium text-gray-900">Exibir ícone de ajuda (Tour)</p>
+                  <p className="text-xs text-gray-500 mt-0.5">Mostra o ícone ? na barra superior para acessar o tour de cada página</p>
                 </div>
                 <Switch
-                  checked={ocultarChecklist}
-                  onCheckedChange={toggleOcultarChecklist}
+                  checked={tourIconsEnabled}
+                  onCheckedChange={toggleTourIcons}
                 />
               </div>
               <div className="pt-2 border-t">
@@ -1164,6 +1164,27 @@ export default function Configuracoes() {
                           </div>
                         </div>
                       )}
+                    </div>
+                  </div>
+
+                  <div className="pt-4 border-t">
+                    <h4 className="font-semibold text-gray-900 mb-4">Complementos</h4>
+                    <div className="space-y-2">
+                      <Label>Limite de complementos por produto</Label>
+                      <Input
+                        type="number"
+                        min={1}
+                        max={20}
+                        className="max-w-xs"
+                        value={confeitariaForm.max_complementos_produto}
+                        onChange={(e) => {
+                          const val = Math.min(20, Math.max(1, parseInt(e.target.value) || 4));
+                          setConfeitariaForm({ ...confeitariaForm, max_complementos_produto: val });
+                        }}
+                      />
+                      <p className="text-xs text-gray-500">
+                        Limite de quantos complementos podem ser adicionados ao produto pelo cliente no catálogo. Padrão: 4.
+                      </p>
                     </div>
                   </div>
 

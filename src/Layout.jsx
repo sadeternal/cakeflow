@@ -22,10 +22,13 @@ import {
   TrendingUp,
   MessageCircle,
   ShieldCheck,
-  Ban } from
+  Ban,
+  HelpCircle } from
 'lucide-react';
 import TrialExpiredModal from '@/components/TrialExpiredModal';
 import SystemNotificationsBell from '@/components/notifications/SystemNotificationsBell';
+import { TourProvider, useTour } from '@/lib/TourContext';
+import TourDialog from '@/components/onboarding/FeatureTour';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -49,6 +52,20 @@ const PAGE_TITLE_BY_ROUTE = {
   AdminPanel: 'Painel Admin',
   AdminProspeccao: 'Prospecção'
 };
+
+function TourHelpButton() {
+  const { activeTour, openTour, iconsEnabled } = useTour();
+  if (!activeTour || !iconsEnabled) return null;
+  return (
+    <button
+      onClick={openTour}
+      title="Ver tour desta página"
+      className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-rose-100 hover:bg-rose-200 text-rose-600 transition-colors"
+    >
+      <HelpCircle className="w-4 h-4" />
+    </button>
+  );
+}
 
 export default function Layout({ children, currentPageName }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -195,6 +212,8 @@ export default function Layout({ children, currentPageName }) {
   }
 
   return (
+    <TourProvider>
+    <TourDialog />
     <div className="min-h-screen bg-gradient-to-br from-rose-50 via-white to-amber-50">
         {/* Mobile sidebar backdrop */}
         {sidebarOpen &&
@@ -318,6 +337,7 @@ export default function Layout({ children, currentPageName }) {
               </h2>
             </div>
             <div className="flex items-center gap-2">
+              <TourHelpButton />
               <SystemNotificationsBell />
             </div>
           </div>
@@ -329,6 +349,7 @@ export default function Layout({ children, currentPageName }) {
         </main>
       </div>
       </div>
+    </TourProvider>
       );
 
       }
