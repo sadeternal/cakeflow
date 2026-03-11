@@ -44,6 +44,9 @@ const fallbackFormasPagamento = [
   { id: '', nome: 'Dinheiro', descricao: '', a_vista: true, parcelamento_max: 1 },
 ].map(normalizeFormaPagamento);
 
+const fmt = (val) =>
+  (parseFloat(val) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+
 export default function CarrinhoCheckout({ confeitaria, carrinho, onClose, onUpdateQuantidade, onRemoverItem, onLimparCarrinho, onEditarItem }) {
   const { toast } = useToast();
   const [step, setStep] = useState(1);
@@ -93,7 +96,6 @@ export default function CarrinhoCheckout({ confeitaria, carrinho, onClose, onUpd
 
   const criarPedidoMutation = useMutation({
     mutationFn: async () => {
-      // Criar pedido
       const observacoesCompletas = [
         clienteData.cpf ? `CPF: ${clienteData.cpf}` : '',
         clienteData.observacoes ? clienteData.observacoes.trim() : ''
@@ -142,11 +144,9 @@ export default function CarrinhoCheckout({ confeitaria, carrinho, onClose, onUpd
         },
         { isPublic: true }
       );
-      setCarrinhoSalvo([...carrinho]); // Salvar carrinho antes de limpar
+      setCarrinhoSalvo([...carrinho]);
       setPedidoCriado(true);
-      if (onLimparCarrinho) {
-        onLimparCarrinho();
-      }
+      if (onLimparCarrinho) onLimparCarrinho();
     },
     onError: (error) => {
       toast({
@@ -163,21 +163,15 @@ export default function CarrinhoCheckout({ confeitaria, carrinho, onClose, onUpd
     const subtotalWhatsApp = carrinhoParaUsar.reduce((acc, item) => acc + (item.preco * item.quantidade), 0);
     const taxaDeliveryWhatsApp = tipoEntrega === 'delivery' ? (confeitaria?.taxa_delivery || 0) : 0;
     const totalWhatsApp = subtotalWhatsApp + taxaDeliveryWhatsApp;
-    const mensagem = `*Novo Pedido - ${tipoEntrega === 'delivery' ? 'DELIVERY' : 'RETIRADA'}*\n\n*Cliente:* ${clienteData.nome}\n*Telefone:* ${clienteData.telefone}\n*Forma de Pagamento:* ${formaPagamentoNome || formaPagamento}${parcelas > 1 ? ` em ${parcelas}x` : ''}\n${tipoEntrega === 'delivery' ? `*Endereço:* ${clienteData.endereco}\n` : ''}\n\n*Produtos:*\n${carrinhoParaUsar.map(item => `• ${item.nome}\n  Quantidade: ${item.quantidade}\n  Valor: R$ ${(item.preco * item.quantidade).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`).join('\n\n')}\n\n*Subtotal:* R$ ${subtotalWhatsApp.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}${tipoEntrega === 'delivery' ? `\n*Taxa de Entrega:* R$ ${taxaDeliveryWhatsApp.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : ''}\n*TOTAL:* R$ ${totalWhatsApp.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}${clienteData.observacoes ? `\n\n*Observações:* ${clienteData.observacoes}` : ''}`;
+    const mensagem = `*Novo Pedido - ${tipoEntrega === 'delivery' ? 'DELIVERY' : 'RETIRADA'}*\n\n*Cliente:* ${clienteData.nome}\n*Telefone:* ${clienteData.telefone}\n*Forma de Pagamento:* ${formaPagamentoNome || formaPagamento}${parcelas > 1 ? ` em ${parcelas}x` : ''}\n${tipoEntrega === 'delivery' ? `*Endereço:* ${clienteData.endereco}\n` : ''}\n\n*Produtos:*\n${carrinhoParaUsar.map(item => `• ${item.nome}\n  Quantidade: ${item.quantidade}\n  Valor: R$ ${fmt(item.preco * item.quantidade)}`).join('\n\n')}\n\n*Subtotal:* R$ ${fmt(subtotalWhatsApp)}${tipoEntrega === 'delivery' ? `\n*Taxa de Entrega:* R$ ${fmt(taxaDeliveryWhatsApp)}` : ''}\n*TOTAL:* R$ ${fmt(totalWhatsApp)}${clienteData.observacoes ? `\n\n*Observações:* ${clienteData.observacoes}` : ''}`;
     window.open(`https://wa.me/55${phone}?text=${encodeURIComponent(mensagem)}`, '_blank');
-    setTimeout(() => {
-      onClose();
-    }, 1000);
-  };
-
-  const handleFinalizar = () => {
-    criarPedidoMutation.mutate();
+    setTimeout(() => { onClose(); }, 1000);
   };
 
   if (pedidoCriado) {
     return (
-      <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl max-w-md w-full p-8 text-center">
+      <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center">
+        <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md p-8 text-center">
           <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
             <CheckCircle className="w-10 h-10 text-green-600" />
           </div>
@@ -186,18 +180,11 @@ export default function CarrinhoCheckout({ confeitaria, carrinho, onClose, onUpd
             Seu pedido foi registrado como orçamento. Em breve entraremos em contato para confirmar.
           </p>
           <div className="space-y-3">
-            <Button
-              onClick={handleEnviarWhatsApp}
-              className="w-full bg-green-500 hover:bg-green-600"
-            >
+            <Button onClick={handleEnviarWhatsApp} className="w-full bg-green-500 hover:bg-green-600">
               <MessageCircle className="w-4 h-4 mr-2" />
               Enviar pelo WhatsApp
             </Button>
-            <Button
-              onClick={onClose}
-              variant="outline"
-              className="w-full"
-            >
+            <Button onClick={onClose} variant="outline" className="w-full">
               Fechar
             </Button>
           </div>
@@ -207,406 +194,384 @@ export default function CarrinhoCheckout({ confeitaria, carrinho, onClose, onUpd
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 overflow-y-auto">
-      <div className="min-h-screen flex items-start justify-center p-4 pt-20">
-        <div className="bg-white rounded-2xl max-w-2xl w-full shadow-2xl">
-          {/* Header */}
-          <div className="flex items-center justify-between p-6 border-b">
-            <div>
-              <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-                <ShoppingCart className="w-6 h-6" />
-                Finalizar Pedido
-              </h2>
-              <p className="text-sm text-gray-500 mt-1">
-                Etapa {step} de 4: {stepTitles[step]}
-              </p>
-            </div>
-            <button
-              onClick={onClose}
-              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
+    <div className="fixed inset-0 z-50 flex flex-col sm:bg-black/50 sm:items-center sm:justify-center sm:p-4">
+      <div className="flex flex-col h-full sm:h-auto sm:max-h-[90vh] sm:max-w-lg sm:w-full bg-white sm:rounded-2xl sm:shadow-2xl overflow-hidden">
 
-          <div className="px-6 pt-4">
-            <div className="grid grid-cols-4 gap-2">
-              {[1, 2, 3, 4].map((currentStep) => (
-                <div
-                  key={currentStep}
-                  className={`h-2 rounded-full transition-colors ${currentStep <= step ? 'bg-rose-500' : 'bg-gray-200'
-                    }`}
-                />
-              ))}
-            </div>
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-3 sm:px-6 sm:py-4 border-b shrink-0">
+          <div>
+            <h2 className="text-lg sm:text-2xl font-bold text-gray-900 flex items-center gap-2">
+              <ShoppingCart className="w-5 h-5 sm:w-6 sm:h-6" />
+              Finalizar Pedido
+            </h2>
+            <p className="text-xs sm:text-sm text-gray-500 mt-0.5">
+              Etapa {step} de 4: {stepTitles[step]}
+            </p>
           </div>
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
 
-          {/* Content */}
-          <div className="p-6">
-            {carrinho.length === 0 ? (
-              <div className="text-center py-12">
-                <ShoppingCart className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                <p className="text-gray-500">Seu carrinho está vazio</p>
-              </div>
-            ) : (
-              <>
-                {step === 1 && (
-                  <div className="space-y-4">
-                    {carrinho.map((item) => (
-                      <div key={item.id} className="flex items-center gap-4 p-4 bg-gray-50 rounded-xl">
-                        <div className="w-16 h-16 shrink-0 bg-white rounded-lg overflow-hidden border">
-                          {item.foto_url ? (
-                            <img
-                              src={item.foto_url}
-                              alt={item.nome}
-                              className="w-full h-full object-cover"
-                            />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center bg-gray-50 text-gray-400">
-                              <ShoppingBag className="w-6 h-6" />
-                            </div>
-                          )}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <h4 className="font-semibold text-gray-900 leading-tight">{item.nome}</h4>
-                          <p className="text-sm text-gray-500">
-                            R$ {(item.preco || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} un.
-                          </p>
-                          {item.complementos_selecionados?.length > 0 && (
-                            <div className="mt-1 space-y-0.5">
-                              {item.complementos_selecionados.map((c, i) => (
-                                <p key={i} className="text-xs text-rose-500">
-                                  + {c.nome}
-                                </p>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          <div className="flex items-center border rounded-lg bg-white">
-                            <button
-                              onClick={() => onUpdateQuantidade(item.id, Math.max(1, item.quantidade - 1))}
-                              className="p-2 hover:bg-gray-50 text-gray-500 transition-colors"
-                            >
-                              <Minus className="w-4 h-4" />
-                            </button>
-                            <span className="w-8 text-center font-medium">{item.quantidade}</span>
-                            <button
-                              onClick={() => onUpdateQuantidade(item.id, item.quantidade + 1)}
-                              className="p-2 hover:bg-gray-50 text-gray-500 transition-colors"
-                            >
-                              <Plus className="w-4 h-4" />
-                            </button>
+        {/* Progress bar */}
+        <div className="px-4 sm:px-6 pt-3 pb-1 shrink-0">
+          <div className="grid grid-cols-4 gap-1.5">
+            {[1, 2, 3, 4].map((s) => (
+              <div
+                key={s}
+                className={`h-1.5 rounded-full transition-colors ${s <= step ? 'bg-rose-500' : 'bg-gray-200'}`}
+              />
+            ))}
+          </div>
+        </div>
+
+        {/* Scrollable content */}
+        <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-4">
+          {carrinho.length === 0 ? (
+            <div className="text-center py-16">
+              <ShoppingCart className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+              <p className="text-gray-500">Seu carrinho está vazio</p>
+            </div>
+          ) : (
+            <>
+              {/* Step 1: Cart items */}
+              {step === 1 && (
+                <div className="space-y-3">
+                  {carrinho.map((item) => (
+                    <div key={item.id} className="flex gap-3 p-3 bg-gray-50 rounded-xl">
+                      {/* Image */}
+                      <div className="w-14 h-14 sm:w-16 sm:h-16 shrink-0 rounded-lg overflow-hidden bg-white border">
+                        {item.foto_url ? (
+                          <img src={item.foto_url} alt={item.nome} className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center bg-gray-50 text-gray-300">
+                            <ShoppingBag className="w-5 h-5" />
                           </div>
-                          {item.complementos_selecionados?.length > 0 && onEditarItem && (
-                            <button
-                              onClick={() => onEditarItem(item)}
-                              className="p-2 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors"
-                              title="Editar complementos"
-                            >
-                              <Pencil className="w-4 h-4" />
-                            </button>
-                          )}
+                        )}
+                      </div>
+
+                      {/* Info + Controls */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-start justify-between gap-1">
+                          <h4 className="font-semibold text-gray-900 text-sm leading-snug flex-1">{item.nome}</h4>
                           <button
                             onClick={() => onRemoverItem(item.id)}
-                            className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                            className="shrink-0 p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
                         </div>
-                      </div>
-                    ))}
-                    <div className="pt-4 border-t mt-6">
-                      <div className="flex justify-between items-center text-lg font-bold">
-                        <span>Subtotal do Carrinho</span>
-                        <span className="text-rose-600">
-                          R$ {subtotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                )}
 
-                {step === 2 && (
-                  <div className="space-y-6">
-                    <div>
-                      <Label className="text-base font-semibold mb-3 block">Tipo de Entrega</Label>
-                      <RadioGroup value={tipoEntrega} onValueChange={setTipoEntrega}>
-                        <label className={`flex items-center gap-3 p-4 rounded-xl cursor-pointer transition-colors ${tipoEntrega === 'delivery' ? 'bg-rose-50 border-2 border-rose-500' : 'bg-gray-50 border-2 border-transparent'}`}>
-                          <RadioGroupItem value="delivery" />
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 font-medium">
-                              <MapPin className="w-4 h-4" />
-                              Delivery
-                            </div>
-                            {confeitaria?.taxa_delivery > 0 && (
-                              <p className="text-sm text-gray-500">
-                                Taxa: R$ {confeitaria.taxa_delivery.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                              </p>
-                            )}
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          R$ {fmt(item.preco)} un.
+                        </p>
+
+                        {item.complementos_selecionados?.length > 0 && (
+                          <div className="mt-1">
+                            {item.complementos_selecionados.map((c, i) => (
+                              <span key={i} className="text-xs text-rose-500 block">+ {c.nome}</span>
+                            ))}
                           </div>
-                        </label>
-                        <label className={`flex items-center gap-3 p-4 rounded-xl cursor-pointer transition-colors ${tipoEntrega === 'retirada' ? 'bg-rose-50 border-2 border-rose-500' : 'bg-gray-50 border-2 border-transparent'}`}>
-                          <RadioGroupItem value="retirada" />
-                          <div className="flex items-center gap-2 font-medium">
-                            <Store className="w-4 h-4" />
-                            Retirada no Local
-                          </div>
-                        </label>
-                      </RadioGroup>
-                    </div>
+                        )}
 
-                    <div className="space-y-4">
-                      <div>
-                        <Label>Nome Completo *</Label>
-                        <Input
-                          value={clienteData.nome}
-                          onChange={(e) => setClienteData({ ...clienteData, nome: e.target.value })}
-                          placeholder="Seu nome"
-                          className="mt-1"
-                        />
-                      </div>
-
-                      <div>
-                        <Label>Telefone / WhatsApp *</Label>
-                        <TelefoneInput
-                          value={clienteData.telefone}
-                          onChange={(e) => setClienteData({ ...clienteData, telefone: e.target.value })}
-                          placeholder="(00) 00000-0000"
-                          className="mt-1"
-                        />
-                      </div>
-
-                      <div>
-                        <Label>CPF (opcional)</Label>
-                        <CPFInput
-                          value={clienteData.cpf}
-                          onChange={(e) => setClienteData({ ...clienteData, cpf: e.target.value })}
-                          placeholder="000.000.000-00"
-                          className="mt-1"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {step === 3 && (
-                  <div className="space-y-6">
-                    <div>
-                      <Label>Forma de Pagamento *</Label>
-                      <RadioGroup
-                        value={formaPagamentoNome || formaPagamento}
-                        onValueChange={(value) => {
-                          const forma = paymentOptions.find((item) => item.nome === value);
-                          if (!forma) return;
-                          setFormaPagamento(forma.nome);
-                          setFormaPagamentoId(forma.id || '');
-                          setFormaPagamentoNome(forma.nome);
-                          setParcelas(forma.a_vista ? 1 : Math.min(parcelas || 1, forma.parcelamento_max));
-                        }}
-                      >
-                        <div className="grid gap-2 mt-2">
-                          {paymentOptions.map((forma) => (
-                            <label
-                              key={`${forma.id || 'fallback'}-${forma.nome}`}
-                              className={`flex items-start gap-3 p-3 rounded-lg cursor-pointer transition-colors ${(formaPagamentoNome || formaPagamento) === forma.nome
-                                ? 'bg-rose-50 border-2 border-rose-500'
-                                : 'bg-gray-50 border-2 border-transparent hover:bg-gray-100'
-                                }`}
+                        {/* Bottom row: qty + edit + total */}
+                        <div className="flex items-center gap-2 mt-2">
+                          <div className="flex items-center border rounded-lg bg-white">
+                            <button
+                              onClick={() => onUpdateQuantidade(item.id, Math.max(1, item.quantidade - 1))}
+                              className="px-2 py-1 hover:bg-gray-50 text-gray-500 transition-colors"
                             >
-                              <RadioGroupItem value={forma.nome} className="mt-1" />
-                              <div>
-                                <span className="font-medium">{forma.nome}</span>
-                                {forma.descricao && (
-                                  <p className="text-sm text-gray-500 mt-1">{forma.descricao}</p>
-                                )}
-                              </div>
-                            </label>
-                          ))}
+                              <Minus className="w-3 h-3" />
+                            </button>
+                            <span className="w-6 text-center text-sm font-medium">{item.quantidade}</span>
+                            <button
+                              onClick={() => onUpdateQuantidade(item.id, item.quantidade + 1)}
+                              className="px-2 py-1 hover:bg-gray-50 text-gray-500 transition-colors"
+                            >
+                              <Plus className="w-3 h-3" />
+                            </button>
+                          </div>
+
+                          {item.complementos_selecionados?.length > 0 && onEditarItem && (
+                            <button
+                              onClick={() => onEditarItem(item)}
+                              className="p-1.5 text-rose-500 hover:bg-rose-50 rounded transition-colors"
+                              title="Editar complementos"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+
+                          <span className="ml-auto text-sm font-semibold text-rose-600">
+                            R$ {fmt(item.preco * item.quantidade)}
+                          </span>
                         </div>
-                      </RadioGroup>
+                      </div>
                     </div>
+                  ))}
 
-                    {shouldShowInstallments && (
-                      <div>
-                        <Label>Parcelas</Label>
-                        <RadioGroup
-                          value={String(parcelas || 1)}
-                          onValueChange={(value) => setParcelas(Number(value) || 1)}
-                          className="grid grid-cols-2 gap-2 mt-2 sm:grid-cols-3"
-                        >
-                          {Array.from({ length: selectedPayment.parcelamento_max }, (_, index) => index + 1).map((parcela) => (
-                            <label
-                              key={parcela}
-                              className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors ${Number(parcelas || 1) === parcela
-                                ? 'bg-rose-50 border-2 border-rose-500'
-                                : 'bg-gray-50 border-2 border-transparent hover:bg-gray-100'
-                                }`}
-                            >
-                              <RadioGroupItem value={String(parcela)} />
-                              <span className="font-medium">{parcela}x</span>
-                            </label>
-                          ))}
-                        </RadioGroup>
-                      </div>
-                    )}
+                  <div className="pt-3 border-t mt-2">
+                    <div className="flex justify-between items-center font-bold">
+                      <span className="text-gray-700">Subtotal</span>
+                      <span className="text-rose-600 text-lg">R$ {fmt(subtotal)}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
 
-                    {tipoEntrega === 'delivery' && (
-                      <div>
-                        <Label>Endereço de Entrega *</Label>
-                        <Textarea
-                          value={clienteData.endereco}
-                          onChange={(e) => setClienteData({ ...clienteData, endereco: e.target.value })}
-                          placeholder="Rua, número, bairro, complemento..."
-                          className="mt-1 min-h-[80px]"
-                        />
-                      </div>
-                    )}
+              {/* Step 2: Customer data */}
+              {step === 2 && (
+                <div className="space-y-5">
+                  <div>
+                    <Label className="text-sm font-semibold mb-2 block">Tipo de Entrega</Label>
+                    <RadioGroup value={tipoEntrega} onValueChange={setTipoEntrega} className="grid grid-cols-2 gap-2">
+                      <label className={`flex items-center gap-2 p-3 rounded-xl cursor-pointer transition-colors ${tipoEntrega === 'delivery' ? 'bg-rose-50 border-2 border-rose-500' : 'bg-gray-50 border-2 border-transparent'}`}>
+                        <RadioGroupItem value="delivery" />
+                        <div>
+                          <div className="flex items-center gap-1.5 font-medium text-sm">
+                            <MapPin className="w-3.5 h-3.5" />
+                            Delivery
+                          </div>
+                          {confeitaria?.taxa_delivery > 0 && (
+                            <p className="text-xs text-gray-500 mt-0.5">+R$ {fmt(confeitaria.taxa_delivery)}</p>
+                          )}
+                        </div>
+                      </label>
+                      <label className={`flex items-center gap-2 p-3 rounded-xl cursor-pointer transition-colors ${tipoEntrega === 'retirada' ? 'bg-rose-50 border-2 border-rose-500' : 'bg-gray-50 border-2 border-transparent'}`}>
+                        <RadioGroupItem value="retirada" />
+                        <div className="flex items-center gap-1.5 font-medium text-sm">
+                          <Store className="w-3.5 h-3.5" />
+                          Retirada
+                        </div>
+                      </label>
+                    </RadioGroup>
+                  </div>
 
+                  <div className="space-y-3">
                     <div>
-                      <Label>Observações</Label>
-                      <Textarea
-                        value={clienteData.observacoes}
-                        onChange={(e) => setClienteData({ ...clienteData, observacoes: e.target.value })}
-                        placeholder="Informações adicionais..."
+                      <Label className="text-sm">Nome Completo *</Label>
+                      <Input
+                        value={clienteData.nome}
+                        onChange={(e) => setClienteData({ ...clienteData, nome: e.target.value })}
+                        placeholder="Seu nome"
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-sm">Telefone / WhatsApp *</Label>
+                      <TelefoneInput
+                        value={clienteData.telefone}
+                        onChange={(e) => setClienteData({ ...clienteData, telefone: e.target.value })}
+                        placeholder="(00) 00000-0000"
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-sm">CPF (opcional)</Label>
+                      <CPFInput
+                        value={clienteData.cpf}
+                        onChange={(e) => setClienteData({ ...clienteData, cpf: e.target.value })}
+                        placeholder="000.000.000-00"
                         className="mt-1"
                       />
                     </div>
                   </div>
-                )}
+                </div>
+              )}
 
-                {step === 4 && (
-                  <div className="space-y-6">
-                    <div className="bg-gray-50 rounded-xl p-4 space-y-3">
-                      <h3 className="font-semibold text-gray-900">Dados do Cliente</h3>
-                      <div className="grid gap-3 sm:grid-cols-2 text-sm">
-                        <div>
-                          <p className="text-gray-500">Nome</p>
-                          <p className="font-medium text-gray-900">{clienteData.nome || 'Não informado'}</p>
-                        </div>
-                        <div>
-                          <p className="text-gray-500">Telefone</p>
-                          <p className="font-medium text-gray-900">{clienteData.telefone || 'Não informado'}</p>
-                        </div>
-                        <div>
-                          <p className="text-gray-500">CPF</p>
-                          <p className="font-medium text-gray-900">{clienteData.cpf || 'Não informado'}</p>
-                        </div>
-                        <div>
-                          <p className="text-gray-500">Tipo de entrega</p>
-                          <p className="font-medium text-gray-900">
-                            {tipoEntrega === 'delivery' ? 'Delivery' : 'Retirada no Local'}
-                          </p>
-                        </div>
+              {/* Step 3: Payment */}
+              {step === 3 && (
+                <div className="space-y-5">
+                  <div>
+                    <Label className="text-sm font-semibold">Forma de Pagamento *</Label>
+                    <RadioGroup
+                      value={formaPagamentoNome || formaPagamento}
+                      onValueChange={(value) => {
+                        const forma = paymentOptions.find((item) => item.nome === value);
+                        if (!forma) return;
+                        setFormaPagamento(forma.nome);
+                        setFormaPagamentoId(forma.id || '');
+                        setFormaPagamentoNome(forma.nome);
+                        setParcelas(forma.a_vista ? 1 : Math.min(parcelas || 1, forma.parcelamento_max));
+                      }}
+                    >
+                      <div className="grid gap-2 mt-2">
+                        {paymentOptions.map((forma) => (
+                          <label
+                            key={`${forma.id || 'fallback'}-${forma.nome}`}
+                            className={`flex items-start gap-3 p-3 rounded-lg cursor-pointer transition-colors ${(formaPagamentoNome || formaPagamento) === forma.nome
+                              ? 'bg-rose-50 border-2 border-rose-500'
+                              : 'bg-gray-50 border-2 border-transparent hover:bg-gray-100'}`}
+                          >
+                            <RadioGroupItem value={forma.nome} className="mt-0.5" />
+                            <div>
+                              <span className="font-medium text-sm">{forma.nome}</span>
+                              {forma.descricao && <p className="text-xs text-gray-500 mt-0.5">{forma.descricao}</p>}
+                            </div>
+                          </label>
+                        ))}
                       </div>
-                    </div>
+                    </RadioGroup>
+                  </div>
 
-                    <div className="bg-gray-50 rounded-xl p-4 space-y-3">
-                      <h3 className="font-semibold text-gray-900">Pagamento e Entrega</h3>
-                      <div className="grid gap-3 sm:grid-cols-2 text-sm">
-                        <div>
-                          <p className="text-gray-500">Forma de pagamento</p>
-                          <p className="font-medium text-gray-900">
-                            {formaPagamentoNome || formaPagamento || 'Não informado'}
-                            {parcelas > 1 ? ` em ${parcelas}x` : ''}
-                          </p>
-                          {selectedPayment?.descricao && (
-                            <p className="text-gray-500 mt-1">{selectedPayment.descricao}</p>
-                          )}
-                        </div>
-                        {tipoEntrega === 'delivery' && (
-                          <div className="sm:col-span-2">
-                            <p className="text-gray-500">Endereço</p>
-                            <p className="font-medium text-gray-900">{clienteData.endereco || 'Não informado'}</p>
-                          </div>
-                        )}
-                        <div className="sm:col-span-2">
-                          <p className="text-gray-500">Observações</p>
-                          <p className="font-medium text-gray-900">{clienteData.observacoes || 'Sem observações'}</p>
-                        </div>
+                  {shouldShowInstallments && (
+                    <div>
+                      <Label className="text-sm font-semibold">Parcelas</Label>
+                      <RadioGroup
+                        value={String(parcelas || 1)}
+                        onValueChange={(value) => setParcelas(Number(value) || 1)}
+                        className="grid grid-cols-3 gap-2 mt-2"
+                      >
+                        {Array.from({ length: selectedPayment.parcelamento_max }, (_, i) => i + 1).map((parcela) => (
+                          <label
+                            key={parcela}
+                            className={`flex items-center gap-2 p-2.5 rounded-lg cursor-pointer transition-colors ${Number(parcelas || 1) === parcela
+                              ? 'bg-rose-50 border-2 border-rose-500'
+                              : 'bg-gray-50 border-2 border-transparent hover:bg-gray-100'}`}
+                          >
+                            <RadioGroupItem value={String(parcela)} />
+                            <span className="font-medium text-sm">{parcela}x</span>
+                          </label>
+                        ))}
+                      </RadioGroup>
+                    </div>
+                  )}
+
+                  {tipoEntrega === 'delivery' && (
+                    <div>
+                      <Label className="text-sm font-semibold">Endereço de Entrega *</Label>
+                      <Textarea
+                        value={clienteData.endereco}
+                        onChange={(e) => setClienteData({ ...clienteData, endereco: e.target.value })}
+                        placeholder="Rua, número, bairro, complemento..."
+                        className="mt-1 min-h-[72px] text-sm"
+                      />
+                    </div>
+                  )}
+
+                  <div>
+                    <Label className="text-sm font-semibold">Observações</Label>
+                    <Textarea
+                      value={clienteData.observacoes}
+                      onChange={(e) => setClienteData({ ...clienteData, observacoes: e.target.value })}
+                      placeholder="Informações adicionais..."
+                      className="mt-1 text-sm"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Step 4: Summary */}
+              {step === 4 && (
+                <div className="space-y-4">
+                  <div className="bg-gray-50 rounded-xl p-4 space-y-2">
+                    <h3 className="font-semibold text-gray-900 text-sm">Dados do Cliente</h3>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                      <div>
+                        <p className="text-xs text-gray-500">Nome</p>
+                        <p className="font-medium text-gray-900 truncate">{clienteData.nome || '—'}</p>
                       </div>
-                    </div>
-
-                    <div className="bg-gray-50 rounded-xl p-4 space-y-2">
-                      <h3 className="font-semibold text-gray-900 mb-3">Resumo do Pedido</h3>
-                      {carrinho.map((item) => (
-                        <div key={item.id} className="flex justify-between text-sm">
-                          <span>{item.nome} (x{item.quantidade})</span>
-                          <span>R$ {(item.preco * item.quantidade).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-                        </div>
-                      ))}
-                      <div className="border-t pt-2 mt-2 space-y-1">
-                        <div className="flex justify-between">
-                          <span>Subtotal</span>
-                          <span>R$ {subtotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-                        </div>
-                        {tipoEntrega === 'delivery' && taxaDelivery > 0 && (
-                          <div className="flex justify-between">
-                            <span>Taxa de Entrega</span>
-                            <span>R$ {taxaDelivery.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-                          </div>
-                        )}
-                        <div className="flex justify-between text-lg font-bold pt-2 border-t">
-                          <span>Total</span>
-                          <span>R$ {total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-                        </div>
+                      <div>
+                        <p className="text-xs text-gray-500">Telefone</p>
+                        <p className="font-medium text-gray-900">{clienteData.telefone || '—'}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500">CPF</p>
+                        <p className="font-medium text-gray-900">{clienteData.cpf || '—'}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500">Entrega</p>
+                        <p className="font-medium text-gray-900">{tipoEntrega === 'delivery' ? 'Delivery' : 'Retirada'}</p>
                       </div>
                     </div>
                   </div>
-                )}
-              </>
-            )}
-          </div>
 
-          {/* Footer */}
-          <div className="border-t p-6 flex gap-3">
-            {step > 1 && (
-              <Button
-                variant="outline"
-                onClick={() => setStep(step - 1)}
-                className="flex-1"
-              >
-                Voltar
-              </Button>
-            )}
-            {step === 1 && (
-              <Button
-                onClick={() => setStep(2)}
-                disabled={!canAdvanceStep1}
-                className="flex-1 bg-rose-500 hover:bg-rose-600"
-              >
-                Continuar
-              </Button>
-            )}
-            {step === 2 && (
-              <Button
-                onClick={() => setStep(3)}
-                disabled={!canAdvanceStep2}
-                className="flex-1 bg-rose-500 hover:bg-rose-600"
-              >
-                Continuar
-              </Button>
-            )}
-            {step === 3 && (
-              <Button
-                onClick={() => setStep(4)}
-                disabled={!canAdvanceStep3}
-                className="flex-1 bg-rose-500 hover:bg-rose-600"
-              >
-                Continuar
-              </Button>
-            )}
-            {step === 4 && (
-              <Button
-                onClick={handleFinalizar}
-                disabled={!canAdvanceStep2 || !canAdvanceStep3 || criarPedidoMutation.isPending}
-                className="flex-1 bg-green-500 hover:bg-green-600"
-              >
-                {criarPedidoMutation.isPending ? 'Enviando...' : 'Finalizar Pedido'}
-              </Button>
-            )}
-          </div>
+                  <div className="bg-gray-50 rounded-xl p-4 space-y-2">
+                    <h3 className="font-semibold text-gray-900 text-sm">Pagamento</h3>
+                    <p className="font-medium text-sm text-gray-900">
+                      {formaPagamentoNome || formaPagamento || '—'}
+                      {parcelas > 1 ? ` em ${parcelas}x` : ''}
+                    </p>
+                    {selectedPayment?.descricao && (
+                      <p className="text-xs text-gray-500">{selectedPayment.descricao}</p>
+                    )}
+                    {tipoEntrega === 'delivery' && clienteData.endereco && (
+                      <div className="pt-2 border-t">
+                        <p className="text-xs text-gray-500">Endereço</p>
+                        <p className="font-medium text-sm text-gray-900">{clienteData.endereco}</p>
+                      </div>
+                    )}
+                    {clienteData.observacoes && (
+                      <div className="pt-2 border-t">
+                        <p className="text-xs text-gray-500">Observações</p>
+                        <p className="font-medium text-sm text-gray-900">{clienteData.observacoes}</p>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="bg-gray-50 rounded-xl p-4">
+                    <h3 className="font-semibold text-gray-900 text-sm mb-3">Itens do Pedido</h3>
+                    <div className="space-y-1.5">
+                      {carrinho.map((item) => (
+                        <div key={item.id} className="flex justify-between text-sm">
+                          <span className="text-gray-700">{item.nome} <span className="text-gray-400">x{item.quantidade}</span></span>
+                          <span className="font-medium shrink-0 ml-2">R$ {fmt(item.preco * item.quantidade)}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="border-t pt-2 mt-3 space-y-1">
+                      <div className="flex justify-between text-sm text-gray-600">
+                        <span>Subtotal</span>
+                        <span>R$ {fmt(subtotal)}</span>
+                      </div>
+                      {tipoEntrega === 'delivery' && taxaDelivery > 0 && (
+                        <div className="flex justify-between text-sm text-gray-600">
+                          <span>Taxa de Entrega</span>
+                          <span>R$ {fmt(taxaDelivery)}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between font-bold text-base pt-2 border-t">
+                        <span>Total</span>
+                        <span className="text-rose-600">R$ {fmt(total)}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
         </div>
+
+        {/* Footer — fixed at bottom */}
+        <div className="border-t px-4 py-3 sm:px-6 sm:py-4 flex gap-2 shrink-0 bg-white">
+          {step > 1 && (
+            <Button variant="outline" onClick={() => setStep(step - 1)} className="flex-1">
+              Voltar
+            </Button>
+          )}
+          {step < 4 && (
+            <Button
+              onClick={() => setStep(step + 1)}
+              disabled={step === 1 ? !canAdvanceStep1 : step === 2 ? !canAdvanceStep2 : !canAdvanceStep3}
+              className="flex-1 bg-rose-500 hover:bg-rose-600"
+            >
+              Continuar
+            </Button>
+          )}
+          {step === 4 && (
+            <Button
+              onClick={() => criarPedidoMutation.mutate()}
+              disabled={!canAdvanceStep2 || !canAdvanceStep3 || criarPedidoMutation.isPending}
+              className="flex-1 bg-green-500 hover:bg-green-600"
+            >
+              {criarPedidoMutation.isPending ? 'Enviando...' : 'Finalizar Pedido'}
+            </Button>
+          )}
+        </div>
+
       </div>
     </div>
   );
