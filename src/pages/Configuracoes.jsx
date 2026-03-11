@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import AssinaturasTab from '@/components/configuracoes/AssinaturasTab';
 import { useEventTracker } from '@/lib/useEventTracker';
+import { useTour } from '@/lib/TourContext';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -117,13 +118,11 @@ export default function Configuracoes() {
   const [activeTab, setActiveTab] = useState(urlParams.get('tab') || 'geral');
   const queryClient = useQueryClient();
 
+  const { iconsEnabled: tourIconsEnabled, setIconsEnabled: setTourContextIcons } = useTour();
   const TOUR_ICONS_KEY = 'cakeflow_tour_icons_enabled';
-  const [tourIconsEnabled, setTourIconsEnabled] = useState(
-    () => localStorage.getItem(TOUR_ICONS_KEY) !== 'false'
-  );
   const toggleTourIcons = (val) => {
-    setTourIconsEnabled(val);
     localStorage.setItem(TOUR_ICONS_KEY, val ? 'true' : 'false');
+    setTourContextIcons(val);
   };
 
   // Form states

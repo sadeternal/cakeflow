@@ -64,6 +64,7 @@ export function TourProvider({ children }) {
       currentSlide,
       setCurrentSlide,
       iconsEnabled,
+      setIconsEnabled,
       registerTour,
       openTour,
       handleClose,
