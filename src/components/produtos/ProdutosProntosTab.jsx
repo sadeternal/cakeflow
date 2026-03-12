@@ -91,7 +91,16 @@ export default function ProdutosProntosTab({ user }) {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id) => appClient.entities.Produto.delete(id),
+    mutationFn: async (produto) => {
+      if (produto.foto_url) {
+        try {
+          await appClient.integrations.Core.DeleteFile({ fileUrl: produto.foto_url });
+        } catch (e) {
+          console.warn('Não foi possível apagar a imagem do storage:', e);
+        }
+      }
+      return appClient.entities.Produto.delete(produto.id);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['produtos'] });
       setShowDeleteDialog(false);
@@ -321,7 +330,7 @@ export default function ProdutosProntosTab({ user }) {
             </Button>
             <Button
               variant="destructive"
-              onClick={() => deleteMutation.mutate(produtoToDelete?.id)}
+              onClick={() => deleteMutation.mutate(produtoToDelete)}
               disabled={deleteMutation.isPending}
             >
               {deleteMutation.isPending ? 'Excluindo...' : 'Excluir'}

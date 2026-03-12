@@ -1259,6 +1259,22 @@ const integrationsApi = {
       }
 
       throw new Error('Não foi possível enviar o arquivo para o Supabase Storage.');
+    },
+
+    async DeleteFile({ fileUrl }) {
+      if (!fileUrl) return;
+      const storagePrefix = `${supabaseUrl}/storage/v1/object/public/`;
+      if (!fileUrl.startsWith(storagePrefix)) return;
+      const rest = fileUrl.slice(storagePrefix.length); // "bucket/path/to/file"
+      const slashIdx = rest.indexOf('/');
+      if (slashIdx === -1) return;
+      const bucket = rest.slice(0, slashIdx);
+      const filePath = rest.slice(slashIdx + 1);
+      await fetch(`${supabaseUrl}/storage/v1/object/${bucket}`, {
+        method: 'DELETE',
+        headers: await buildAuthHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ prefixes: [filePath] }),
+      });
     }
   }
 };
