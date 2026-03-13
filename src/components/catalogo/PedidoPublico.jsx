@@ -1053,29 +1053,31 @@ export default function PedidoPublico({ confeitaria, onClose }) {
               onValueChange={(value) => setPedido({ ...pedido, tipo_entrega: value })}
               className="grid gap-3"
             >
-              <label
-                className={`flex items-center justify-between p-4 rounded-xl cursor-pointer transition-colors ${pedido.tipo_entrega === 'entrega'
-                  ? 'border-2'
-                  : 'bg-gray-50 hover:bg-gray-100 border-2 border-transparent'
-                  }`}
-                style={{
-                  backgroundColor: pedido.tipo_entrega === 'entrega' ? `${corPrincipal}10` : undefined,
-                  borderColor: pedido.tipo_entrega === 'entrega' ? corPrincipal : undefined,
-                }}
-              >
-                <div className="flex items-center gap-3">
-                  <RadioGroupItem value="entrega" />
-                  <div>
-                    <p className="font-medium text-gray-900">Delivery</p>
-                    <p className="text-sm text-gray-500">Entrega no endereço combinado</p>
+              {confeitaria?.delivery_ativo !== false && confeitaria?.delivery_catalogo_personalizado !== false && (
+                <label
+                  className={`flex items-center justify-between p-4 rounded-xl cursor-pointer transition-colors ${pedido.tipo_entrega === 'entrega'
+                    ? 'border-2'
+                    : 'bg-gray-50 hover:bg-gray-100 border-2 border-transparent'
+                    }`}
+                  style={{
+                    backgroundColor: pedido.tipo_entrega === 'entrega' ? `${corPrincipal}10` : undefined,
+                    borderColor: pedido.tipo_entrega === 'entrega' ? corPrincipal : undefined,
+                  }}
+                >
+                  <div className="flex items-center gap-3">
+                    <RadioGroupItem value="entrega" />
+                    <div>
+                      <p className="font-medium text-gray-900">Delivery</p>
+                      <p className="text-sm text-gray-500">Entrega no endereço combinado</p>
+                    </div>
                   </div>
-                </div>
-                {confeitaria?.taxa_delivery > 0 && (
-                  <span className="font-bold" style={{ color: corPrincipal }}>
-                    + R$ {Number(confeitaria.taxa_delivery || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                  </span>
-                )}
-              </label>
+                  {confeitaria?.taxa_delivery > 0 && (
+                    <span className="font-bold" style={{ color: corPrincipal }}>
+                      + R$ {Number(confeitaria.taxa_delivery || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    </span>
+                  )}
+                </label>
+              )}
 
               <label
                 className={`flex items-center justify-between p-4 rounded-xl cursor-pointer transition-colors ${pedido.tipo_entrega === 'retirada'

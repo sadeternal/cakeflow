@@ -25,7 +25,9 @@ import {
   Minus,
   ShoppingCart,
   Truck,
-  Pencil
+  Pencil,
+  Candy,
+  Sandwich,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -47,15 +49,18 @@ import { useToast } from '@/components/ui/use-toast';
 import CustomizadorProdutoModal from '@/components/catalogo/CustomizadorProdutoModal';
 
 const stepsPersonalizado = [
-  { id: 1, title: 'Cliente', icon: User },
-  { id: 2, title: 'Tamanho', icon: Cake },
-  { id: 3, title: 'Massa', icon: Layers },
-  { id: 4, title: 'Recheios', icon: Cookie },
-  { id: 5, title: 'Cobertura', icon: Sparkles },
-  { id: 6, title: 'Extras', icon: Sparkles },
-  { id: 7, title: 'Entrega', icon: Calendar },
-  { id: 8, title: 'Pagamento', icon: CreditCard },
-  { id: 9, title: 'Resumo', icon: Check },
+  { id: 1,  title: 'Cliente',         icon: User },
+  { id: 2,  title: 'Tamanho',         icon: Cake },
+  { id: 3,  title: 'Massa',           icon: Layers },
+  { id: 4,  title: 'Recheios',        icon: Cookie },
+  { id: 5,  title: 'Cobertura',       icon: Sparkles },
+  { id: 6,  title: 'Extras',          icon: Sparkles },
+  { id: 7,  title: 'Doces',           icon: Candy },
+  { id: 8,  title: 'Salgados',        icon: Sandwich },
+  { id: 9,  title: 'Tipo de Entrega', icon: Truck },
+  { id: 10, title: 'Entrega',         icon: Calendar },
+  { id: 11, title: 'Pagamento',       icon: CreditCard },
+  { id: 12, title: 'Resumo',          icon: Check },
 ];
 
 const stepsProdutoPronto = [
@@ -123,6 +128,10 @@ export default function NovoPedido() {
     cobertura_id: '',
     cobertura_nome: '',
     extras: [],
+    doces: [],
+    salgados: [],
+    deseja_doces: false,
+    deseja_salgados: false,
     data_entrega: '',
     horario_entrega: '',
     observacoes: '',
@@ -138,6 +147,8 @@ export default function NovoPedido() {
     valor_recheios: 0,
     valor_cobertura: 0,
     valor_extras: 0,
+    valor_doces: 0,
+    valor_salgados: 0,
     valor_urgencia: 0,
     valor_total: 0,
   });
@@ -210,6 +221,18 @@ export default function NovoPedido() {
     enabled: !!user?.confeitaria_id && tipoPedido === 'produto_pronto',
   });
 
+  const { data: doces = [] } = useQuery({
+    queryKey: ['doces-pedido', user?.confeitaria_id],
+    queryFn: () => appClient.entities.Doce.filter({ confeitaria_id: user.confeitaria_id, ativo: true }),
+    enabled: !!user?.confeitaria_id && tipoPedido === 'personalizado',
+  });
+
+  const { data: salgados = [] } = useQuery({
+    queryKey: ['salgados-pedido', user?.confeitaria_id],
+    queryFn: () => appClient.entities.Salgado.filter({ confeitaria_id: user.confeitaria_id, ativo: true }),
+    enabled: !!user?.confeitaria_id && tipoPedido === 'personalizado',
+  });
+
   const { data: formasPagamento = [] } = useQuery({
     queryKey: ['formasPagamento', user?.confeitaria_id],
     queryFn: () => appClient.entities.FormaPagamento.filter({ confeitaria_id: user.confeitaria_id, ativo: true }),
@@ -242,6 +265,10 @@ export default function NovoPedido() {
       cobertura_id:     pedidoParaEditar.cobertura_id     || '',
       cobertura_nome:   pedidoParaEditar.cobertura_nome   || '',
       extras:           pedidoParaEditar.extras           || [],
+      doces:            pedidoParaEditar.doces            || [],
+      salgados:         pedidoParaEditar.salgados         || [],
+      deseja_doces:     (pedidoParaEditar.doces?.length > 0),
+      deseja_salgados:  (pedidoParaEditar.salgados?.length > 0),
       data_entrega:     pedidoParaEditar.data_entrega     || '',
       horario_entrega:  pedidoParaEditar.horario_entrega  || '',
       observacoes:      pedidoParaEditar.observacoes      || '',
@@ -257,6 +284,8 @@ export default function NovoPedido() {
       valor_recheios:   pedidoParaEditar.valor_recheios   || 0,
       valor_cobertura:  pedidoParaEditar.valor_cobertura  || 0,
       valor_extras:     pedidoParaEditar.valor_extras     || 0,
+      valor_doces:      pedidoParaEditar.valor_doces      || 0,
+      valor_salgados:   pedidoParaEditar.valor_salgados   || 0,
       valor_urgencia:   pedidoParaEditar.valor_urgencia   || 0,
       valor_total:      pedidoParaEditar.valor_total      || 0,
     });
@@ -302,8 +331,10 @@ export default function NovoPedido() {
       };
     }
 
+    // eslint-disable-next-line no-unused-vars
+    const { deseja_doces, deseja_salgados, ...cleanBase } = basePayload;
     return {
-      ...basePayload,
+      ...cleanBase,
       numero: null,
       status: 'orcamento',
       tipo: 'personalizado',
@@ -391,26 +422,30 @@ export default function NovoPedido() {
   useEffect(() => {
     const valorRecheios = pedido.recheios.reduce((acc, r) => acc + (r.valor || 0), 0);
     const valorExtras = pedido.extras.reduce((acc, e) => acc + (e.valor || 0), 0);
+    const valorDoces = pedido.doces.reduce((acc, d) => acc + (d.valor_unitario * d.quantidade), 0);
+    const valorSalgados = pedido.salgados.reduce((acc, s) => acc + (s.valor_unitario * s.quantidade), 0);
 
     let valorUrgencia = 0;
     if (pedido.data_entrega && confeitaria?.prazo_minimo_dias && confeitaria?.habilitar_taxa_urgencia !== false) {
       const dias = differenceInDays(parseISO(pedido.data_entrega), new Date());
       if (dias < confeitaria.prazo_minimo_dias && dias >= 0) {
-        const subtotal = pedido.valor_tamanho + pedido.valor_massa + valorRecheios + pedido.valor_cobertura + valorExtras;
+        const subtotal = pedido.valor_tamanho + pedido.valor_massa + valorRecheios + pedido.valor_cobertura + valorExtras + valorDoces + valorSalgados;
         valorUrgencia = subtotal * ((confeitaria.taxa_urgencia_percentual || 20) / 100);
       }
     }
 
-    const total = pedido.valor_tamanho + pedido.valor_massa + valorRecheios + pedido.valor_cobertura + valorExtras + valorUrgencia;
+    const total = pedido.valor_tamanho + pedido.valor_massa + valorRecheios + pedido.valor_cobertura + valorExtras + valorDoces + valorSalgados + valorUrgencia;
 
     setPedido(prev => ({
       ...prev,
       valor_recheios: valorRecheios,
       valor_extras: valorExtras,
+      valor_doces: valorDoces,
+      valor_salgados: valorSalgados,
       valor_urgencia: valorUrgencia,
       valor_total: total,
     }));
-  }, [pedido.valor_tamanho, pedido.valor_massa, pedido.recheios, pedido.valor_cobertura, pedido.extras, pedido.data_entrega, confeitaria]);
+  }, [pedido.valor_tamanho, pedido.valor_massa, pedido.recheios, pedido.valor_cobertura, pedido.extras, pedido.doces, pedido.salgados, pedido.data_entrega, confeitaria]);
 
   const selectedTamanho = tamanhos.find(t => t.id === pedido.tamanho_id);
   const maxRecheios = selectedTamanho?.max_recheios || 2;
@@ -488,14 +523,17 @@ export default function NovoPedido() {
       }
     }
     switch (currentStep) {
-      case 1: return pedido.cliente_nome && pedido.cliente_telefone;
-      case 2: return pedido.tamanho_id;
-      case 3: return pedido.massa_id;
-      case 4: return pedido.recheios.length > 0;
-      case 5: return pedido.cobertura_id;
-      case 6: return true;
-      case 7: return pedido.data_entrega;
-      case 8: return pedido.forma_pagamento;
+      case 1:  return pedido.cliente_nome && pedido.cliente_telefone;
+      case 2:  return pedido.tamanho_id;
+      case 3:  return pedido.massa_id;
+      case 4:  return pedido.recheios.length > 0;
+      case 5:  return pedido.cobertura_id;
+      case 6:  return true; // extras opcional
+      case 7:  return true; // doces opcional
+      case 8:  return true; // salgados opcional
+      case 9:  return pedido.tipo_entrega;
+      case 10: return pedido.data_entrega;
+      case 11: return pedido.forma_pagamento;
       default: return true;
     }
   };
@@ -950,6 +988,239 @@ export default function NovoPedido() {
             </div>
           )}
 
+          {/* === PERSONALIZADO: Step 7 - Doces === */}
+          {tipoPedido === 'personalizado' && currentStep === 7 && (
+            <div className="space-y-6">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
+                  <div>
+                    <p className="font-medium text-gray-900">Deseja adicionar doces?</p>
+                    <p className="text-sm text-gray-500 mt-1">Brigadeiros, beijinhos, etc.</p>
+                  </div>
+                  <Checkbox
+                    checked={pedido.deseja_doces}
+                    onCheckedChange={(checked) => {
+                      setPedido({ ...pedido, deseja_doces: checked, doces: checked ? pedido.doces : [] });
+                    }}
+                  />
+                </div>
+
+                {pedido.deseja_doces && (
+                  <div className="space-y-3 mt-4">
+                    {doces.length === 0 ? (
+                      <p className="text-center text-gray-500 py-8">Nenhum doce disponível no momento</p>
+                    ) : (
+                      <>
+                        <p className="text-sm font-medium text-gray-700">Selecione os doces:</p>
+                        {doces.map((doce) => {
+                          const selected = pedido.doces.find(d => d.id === doce.id);
+                          return (
+                            <div
+                              key={doce.id}
+                              className={`p-4 rounded-xl transition-colors ${selected ? 'bg-rose-100 border-2 border-rose-500' : 'bg-gray-50 border-2 border-transparent'}`}
+                            >
+                              <div className="flex items-start justify-between gap-4">
+                                <div className="flex items-start gap-3 flex-1">
+                                  <Checkbox
+                                    checked={!!selected}
+                                    onCheckedChange={(checked) => {
+                                      if (checked) {
+                                        setPedido({ ...pedido, doces: [...pedido.doces, { id: doce.id, nome: doce.nome, valor_unitario: doce.valor_unitario, quantidade_minima: doce.quantidade_minima, quantidade: doce.quantidade_minima || 1 }] });
+                                      } else {
+                                        setPedido({ ...pedido, doces: pedido.doces.filter(d => d.id !== doce.id) });
+                                      }
+                                    }}
+                                  />
+                                  <div className="flex-1">
+                                    <div className="flex items-start justify-between gap-2">
+                                      <div>
+                                        <p className="font-medium text-gray-900">{doce.nome}</p>
+                                        {doce.quantidade_minima > 1 && (
+                                          <p className="text-xs text-gray-500 mt-0.5">Mínimo: {doce.quantidade_minima} un.</p>
+                                        )}
+                                      </div>
+                                      <span className="font-bold text-rose-600 whitespace-nowrap">
+                                        R$ {doce.valor_unitario?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} /un
+                                      </span>
+                                    </div>
+                                    {selected && (
+                                      <div className="mt-3 flex items-center gap-2">
+                                        <Label className="text-sm">Quantidade:</Label>
+                                        <div className="flex items-center gap-2">
+                                          <Button type="button" variant="outline" size="icon" className="h-9 w-9"
+                                            onClick={() => {
+                                              const novaQtd = Math.max(selected.quantidade - 10, doce.quantidade_minima || 1);
+                                              setPedido({ ...pedido, doces: pedido.doces.map(d => d.id === doce.id ? { ...d, quantidade: novaQtd } : d) });
+                                            }}>
+                                            <Minus className="w-4 h-4" />
+                                          </Button>
+                                          <Input type="number" min={doce.quantidade_minima || 1} value={selected.quantidade}
+                                            onChange={(e) => {
+                                              const novaQtd = Math.max(parseInt(e.target.value) || 1, doce.quantidade_minima || 1);
+                                              setPedido({ ...pedido, doces: pedido.doces.map(d => d.id === doce.id ? { ...d, quantidade: novaQtd } : d) });
+                                            }}
+                                            className="w-16 text-center"
+                                          />
+                                          <Button type="button" variant="outline" size="icon" className="h-9 w-9"
+                                            onClick={() => {
+                                              const novaQtd = selected.quantidade + 10;
+                                              setPedido({ ...pedido, doces: pedido.doces.map(d => d.id === doce.id ? { ...d, quantidade: novaQtd } : d) });
+                                            }}>
+                                            <Plus className="w-4 h-4" />
+                                          </Button>
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* === PERSONALIZADO: Step 8 - Salgados === */}
+          {tipoPedido === 'personalizado' && currentStep === 8 && (
+            <div className="space-y-6">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
+                  <div>
+                    <p className="font-medium text-gray-900">Deseja adicionar salgados?</p>
+                    <p className="text-sm text-gray-500 mt-1">Coxinhas, risoles, etc.</p>
+                  </div>
+                  <Checkbox
+                    checked={pedido.deseja_salgados}
+                    onCheckedChange={(checked) => {
+                      setPedido({ ...pedido, deseja_salgados: checked, salgados: checked ? pedido.salgados : [] });
+                    }}
+                  />
+                </div>
+
+                {pedido.deseja_salgados && (
+                  <div className="space-y-3 mt-4">
+                    {salgados.length === 0 ? (
+                      <p className="text-center text-gray-500 py-8">Nenhum salgado disponível no momento</p>
+                    ) : (
+                      <>
+                        <p className="text-sm font-medium text-gray-700">Selecione os salgados:</p>
+                        {salgados.map((salgado) => {
+                          const selected = pedido.salgados.find(s => s.id === salgado.id);
+                          return (
+                            <div
+                              key={salgado.id}
+                              className={`p-4 rounded-xl transition-colors ${selected ? 'bg-rose-100 border-2 border-rose-500' : 'bg-gray-50 border-2 border-transparent'}`}
+                            >
+                              <div className="flex items-start justify-between gap-4">
+                                <div className="flex items-start gap-3 flex-1">
+                                  <Checkbox
+                                    checked={!!selected}
+                                    onCheckedChange={(checked) => {
+                                      if (checked) {
+                                        setPedido({ ...pedido, salgados: [...pedido.salgados, { id: salgado.id, nome: salgado.nome, valor_unitario: salgado.valor_unitario, quantidade_minima: salgado.quantidade_minima, quantidade: salgado.quantidade_minima || 1 }] });
+                                      } else {
+                                        setPedido({ ...pedido, salgados: pedido.salgados.filter(s => s.id !== salgado.id) });
+                                      }
+                                    }}
+                                  />
+                                  <div className="flex-1">
+                                    <div className="flex items-start justify-between gap-2">
+                                      <div>
+                                        <p className="font-medium text-gray-900">{salgado.nome}</p>
+                                        {salgado.quantidade_minima > 1 && (
+                                          <p className="text-xs text-gray-500 mt-0.5">Mínimo: {salgado.quantidade_minima} un.</p>
+                                        )}
+                                      </div>
+                                      <span className="font-bold text-rose-600 whitespace-nowrap">
+                                        R$ {salgado.valor_unitario?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} /un
+                                      </span>
+                                    </div>
+                                    {selected && (
+                                      <div className="mt-3 flex items-center gap-2">
+                                        <Label className="text-sm">Quantidade:</Label>
+                                        <div className="flex items-center gap-2">
+                                          <Button type="button" variant="outline" size="icon" className="h-9 w-9"
+                                            onClick={() => {
+                                              const novaQtd = Math.max(selected.quantidade - 10, salgado.quantidade_minima || 1);
+                                              setPedido({ ...pedido, salgados: pedido.salgados.map(s => s.id === salgado.id ? { ...s, quantidade: novaQtd } : s) });
+                                            }}>
+                                            <Minus className="w-4 h-4" />
+                                          </Button>
+                                          <Input type="number" min={salgado.quantidade_minima || 1} value={selected.quantidade}
+                                            onChange={(e) => {
+                                              const novaQtd = Math.max(parseInt(e.target.value) || 1, salgado.quantidade_minima || 1);
+                                              setPedido({ ...pedido, salgados: pedido.salgados.map(s => s.id === salgado.id ? { ...s, quantidade: novaQtd } : s) });
+                                            }}
+                                            className="w-16 text-center"
+                                          />
+                                          <Button type="button" variant="outline" size="icon" className="h-9 w-9"
+                                            onClick={() => {
+                                              const novaQtd = selected.quantidade + 10;
+                                              setPedido({ ...pedido, salgados: pedido.salgados.map(s => s.id === salgado.id ? { ...s, quantidade: novaQtd } : s) });
+                                            }}>
+                                            <Plus className="w-4 h-4" />
+                                          </Button>
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* === PERSONALIZADO: Step 9 - Tipo de Entrega === */}
+          {tipoPedido === 'personalizado' && currentStep === 9 && (
+            <RadioGroup
+              value={pedido.tipo_entrega}
+              onValueChange={(value) => setPedido({ ...pedido, tipo_entrega: value, valor_delivery: value === 'entrega' ? (confeitaria?.taxa_delivery || 0) : 0 })}
+              className="grid gap-3"
+            >
+              <label
+                className={`flex items-center justify-between p-4 rounded-xl cursor-pointer transition-colors ${pedido.tipo_entrega === 'retirada' ? 'bg-rose-100 border-2 border-rose-500' : 'bg-gray-50 hover:bg-gray-100 border-2 border-transparent'}`}
+              >
+                <div className="flex items-center gap-3">
+                  <RadioGroupItem value="retirada" />
+                  <div>
+                    <p className="font-medium text-gray-900">Retirada no local</p>
+                    <p className="text-sm text-gray-500">Retirada na confeitaria na data escolhida</p>
+                  </div>
+                </div>
+              </label>
+              {confeitaria?.delivery_ativo !== false && confeitaria?.delivery_interno_personalizado !== false && (
+                <label
+                  className={`flex items-center justify-between p-4 rounded-xl cursor-pointer transition-colors ${pedido.tipo_entrega === 'entrega' ? 'bg-rose-100 border-2 border-rose-500' : 'bg-gray-50 hover:bg-gray-100 border-2 border-transparent'}`}
+                >
+                  <div className="flex items-center gap-3">
+                    <RadioGroupItem value="entrega" />
+                    <div>
+                      <p className="font-medium text-gray-900">Delivery</p>
+                      <p className="text-sm text-gray-500">Entrega no endereço combinado</p>
+                    </div>
+                  </div>
+                  {confeitaria?.taxa_delivery > 0 && (
+                    <span className="font-bold text-rose-600">
+                      + R$ {Number(confeitaria.taxa_delivery || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    </span>
+                  )}
+                </label>
+              )}
+            </RadioGroup>
+          )}
+
           {/* === PRODUTO PRONTO: Step 2 - Produtos === */}
           {tipoPedido === 'produto_pronto' && currentStep === 2 && (
             <div className="space-y-4">
@@ -1054,7 +1325,7 @@ export default function NovoPedido() {
           {tipoPedido === 'produto_pronto' && currentStep === 3 && (
             <div className="space-y-4">
               <Label>Tipo de Entrega *</Label>
-              <div className="grid grid-cols-2 gap-3">
+              <div className={`grid gap-3 ${confeitaria?.delivery_ativo !== false && confeitaria?.delivery_interno_pronto !== false ? 'grid-cols-2' : 'grid-cols-1'}`}>
                 <button
                   onClick={() => setPedido({ ...pedido, tipo_entrega: 'retirada', valor_delivery: 0 })}
                   className={`p-4 rounded-xl text-center transition-colors ${
@@ -1066,6 +1337,7 @@ export default function NovoPedido() {
                   <Package className="w-6 h-6 mx-auto mb-2 text-gray-600" />
                   <p className="font-medium">Retirada</p>
                 </button>
+                {confeitaria?.delivery_ativo !== false && confeitaria?.delivery_interno_pronto !== false && (
                 <button
                   onClick={() => setPedido({ ...pedido, tipo_entrega: 'delivery', valor_delivery: confeitaria?.taxa_delivery || 0 })}
                   className={`p-4 rounded-xl text-center transition-colors ${
@@ -1077,6 +1349,7 @@ export default function NovoPedido() {
                   <Truck className="w-6 h-6 mx-auto mb-2 text-gray-600" />
                   <p className="font-medium">Delivery</p>
                 </button>
+                )}
               </div>
 
               {pedido.tipo_entrega === 'delivery' && (
@@ -1306,8 +1579,8 @@ export default function NovoPedido() {
             </div>
           )}
 
-          {/* === PERSONALIZADO: Step 7 - Entrega === */}
-          {tipoPedido === 'personalizado' && currentStep === 7 && (
+          {/* === PERSONALIZADO: Step 10 - Entrega === */}
+          {tipoPedido === 'personalizado' && currentStep === 10 && (
             <div className="space-y-4">
               <div>
                 <Label>Data de Entrega *</Label>
@@ -1357,8 +1630,8 @@ export default function NovoPedido() {
             </div>
           )}
 
-          {/* === PERSONALIZADO: Step 8 - Pagamento === */}
-          {tipoPedido === 'personalizado' && currentStep === 8 && (
+          {/* === PERSONALIZADO: Step 11 - Pagamento === */}
+          {tipoPedido === 'personalizado' && currentStep === 11 && (
             <div className="space-y-4">
               <Label>Forma de Pagamento *</Label>
               <RadioGroup
@@ -1423,8 +1696,8 @@ export default function NovoPedido() {
             </div>
           )}
 
-          {/* === PERSONALIZADO: Step 9 - Resumo === */}
-          {tipoPedido === 'personalizado' && currentStep === 9 && (
+          {/* === PERSONALIZADO: Step 12 - Resumo === */}
+          {tipoPedido === 'personalizado' && currentStep === 12 && (
             <div className="space-y-6">
               <div className="grid gap-4">
                 <div className="p-4 bg-gray-50 rounded-xl">
@@ -1460,9 +1733,40 @@ export default function NovoPedido() {
                   </div>
                 )}
 
+                {pedido.doces.length > 0 && (
+                  <div className="p-4 bg-gray-50 rounded-xl">
+                    <p className="text-sm text-gray-500">Doces</p>
+                    <div className="mt-2 space-y-1">
+                      {pedido.doces.map((d, i) => (
+                        <div key={i} className="flex justify-between text-sm">
+                          <span>{d.quantidade}x {d.nome}</span>
+                          <span className="font-medium">R$ {(d.valor_unitario * d.quantidade).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {pedido.salgados.length > 0 && (
+                  <div className="p-4 bg-gray-50 rounded-xl">
+                    <p className="text-sm text-gray-500">Salgados</p>
+                    <div className="mt-2 space-y-1">
+                      {pedido.salgados.map((s, i) => (
+                        <div key={i} className="flex justify-between text-sm">
+                          <span>{s.quantidade}x {s.nome}</span>
+                          <span className="font-medium">R$ {(s.valor_unitario * s.quantidade).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 <div className="p-4 bg-gray-50 rounded-xl">
                   <p className="text-sm text-gray-500">Entrega</p>
                   <p className="font-semibold text-gray-900">
+                    {pedido.tipo_entrega === 'entrega' ? 'Delivery' : pedido.tipo_entrega === 'retirada' ? 'Retirada no local' : ''}
+                  </p>
+                  <p className="font-semibold text-gray-900 mt-1">
                     {pedido.data_entrega && format(parseISO(pedido.data_entrega), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
                     {pedido.horario_entrega && ` às ${pedido.horario_entrega}`}
                   </p>
@@ -1515,6 +1819,24 @@ export default function NovoPedido() {
                   <div className="flex justify-between text-sm">
                     <span>Extras</span>
                     <span>+ R$ {pedido.valor_extras?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                )}
+                {pedido.valor_doces > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span>Doces</span>
+                    <span>+ R$ {pedido.valor_doces?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                )}
+                {pedido.valor_salgados > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span>Salgados</span>
+                    <span>+ R$ {pedido.valor_salgados?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                )}
+                {pedido.valor_delivery > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span>Taxa de entrega</span>
+                    <span>+ R$ {pedido.valor_delivery?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
                   </div>
                 )}
                 {pedido.valor_urgencia > 0 && (

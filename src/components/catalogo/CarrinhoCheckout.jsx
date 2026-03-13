@@ -50,7 +50,7 @@ const fmt = (val) =>
 export default function CarrinhoCheckout({ confeitaria, carrinho, onClose, onUpdateQuantidade, onRemoverItem, onLimparCarrinho, onEditarItem }) {
   const { toast } = useToast();
   const [step, setStep] = useState(1);
-  const [tipoEntrega, setTipoEntrega] = useState('delivery');
+  const [tipoEntrega, setTipoEntrega] = useState(confeitaria?.delivery_ativo !== false && confeitaria?.delivery_catalogo_pronto !== false ? 'delivery' : 'retirada');
   const [clienteData, setClienteData] = useState({
     nome: '',
     cpf: '',
@@ -327,19 +327,25 @@ export default function CarrinhoCheckout({ confeitaria, carrinho, onClose, onUpd
                 <div className="space-y-5">
                   <div>
                     <Label className="text-sm font-semibold mb-2 block">Tipo de Entrega</Label>
-                    <RadioGroup value={tipoEntrega} onValueChange={setTipoEntrega} className="grid grid-cols-2 gap-2">
-                      <label className={`flex items-center gap-2 p-3 rounded-xl cursor-pointer transition-colors ${tipoEntrega === 'delivery' ? 'bg-rose-50 border-2 border-rose-500' : 'bg-gray-50 border-2 border-transparent'}`}>
-                        <RadioGroupItem value="delivery" />
-                        <div>
-                          <div className="flex items-center gap-1.5 font-medium text-sm">
-                            <MapPin className="w-3.5 h-3.5" />
-                            Delivery
+                    <RadioGroup
+                      value={tipoEntrega}
+                      onValueChange={setTipoEntrega}
+                      className={`grid gap-2 ${confeitaria?.delivery_ativo !== false && confeitaria?.delivery_catalogo_pronto !== false ? 'grid-cols-2' : 'grid-cols-1'}`}
+                    >
+                      {confeitaria?.delivery_ativo !== false && confeitaria?.delivery_catalogo_pronto !== false && (
+                        <label className={`flex items-center gap-2 p-3 rounded-xl cursor-pointer transition-colors ${tipoEntrega === 'delivery' ? 'bg-rose-50 border-2 border-rose-500' : 'bg-gray-50 border-2 border-transparent'}`}>
+                          <RadioGroupItem value="delivery" />
+                          <div>
+                            <div className="flex items-center gap-1.5 font-medium text-sm">
+                              <MapPin className="w-3.5 h-3.5" />
+                              Delivery
+                            </div>
+                            {confeitaria?.taxa_delivery > 0 && (
+                              <p className="text-xs text-gray-500 mt-0.5">+R$ {fmt(confeitaria.taxa_delivery)}</p>
+                            )}
                           </div>
-                          {confeitaria?.taxa_delivery > 0 && (
-                            <p className="text-xs text-gray-500 mt-0.5">+R$ {fmt(confeitaria.taxa_delivery)}</p>
-                          )}
-                        </div>
-                      </label>
+                        </label>
+                      )}
                       <label className={`flex items-center gap-2 p-3 rounded-xl cursor-pointer transition-colors ${tipoEntrega === 'retirada' ? 'bg-rose-50 border-2 border-rose-500' : 'bg-gray-50 border-2 border-transparent'}`}>
                         <RadioGroupItem value="retirada" />
                         <div className="flex items-center gap-1.5 font-medium text-sm">

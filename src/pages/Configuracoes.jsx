@@ -20,6 +20,9 @@ import {
   Eye,
   EyeOff,
   Package,
+  ShoppingBag,
+  Truck,
+  MessageSquare,
 } from 'lucide-react';
 import AssinaturasTab from '@/components/configuracoes/AssinaturasTab';
 import { useEventTracker } from '@/lib/useEventTracker';
@@ -139,6 +142,12 @@ export default function Configuracoes() {
     habilitar_taxa_urgencia: true,
     taxa_urgencia_percentual: 20,
     taxa_delivery: 0,
+    delivery_ativo: true,
+    delivery_catalogo_pronto: true,
+    delivery_catalogo_personalizado: true,
+    delivery_interno_pronto: true,
+    delivery_interno_personalizado: true,
+    mensagem_confirmacao_pedido: '',
     max_complementos_produto: 4,
     categorias_produto: [
       { value: 'bolo', label: 'Bolo' },
@@ -190,6 +199,12 @@ export default function Configuracoes() {
           habilitar_taxa_urgencia: conf.habilitar_taxa_urgencia !== false,
           taxa_urgencia_percentual: conf.taxa_urgencia_percentual || 20,
           taxa_delivery: conf.taxa_delivery || 0,
+          delivery_ativo: conf.delivery_ativo !== false,
+          delivery_catalogo_pronto: conf.delivery_catalogo_pronto !== false,
+          delivery_catalogo_personalizado: conf.delivery_catalogo_personalizado !== false,
+          delivery_interno_pronto: conf.delivery_interno_pronto !== false,
+          delivery_interno_personalizado: conf.delivery_interno_personalizado !== false,
+          mensagem_confirmacao_pedido: conf.mensagem_confirmacao_pedido || '',
           max_complementos_produto: conf.max_complementos_produto || 4,
           categorias_produto: Array.isArray(conf.categorias_produto) && conf.categorias_produto.length > 0
             ? conf.categorias_produto
@@ -233,6 +248,12 @@ export default function Configuracoes() {
     habilitar_taxa_urgencia: !!confeitariaForm.habilitar_taxa_urgencia,
     taxa_urgencia_percentual: Number(confeitariaForm.taxa_urgencia_percentual) || 0,
     taxa_delivery: Number(confeitariaForm.taxa_delivery) || 0,
+    delivery_ativo: confeitariaForm.delivery_ativo !== false,
+    delivery_catalogo_pronto: confeitariaForm.delivery_catalogo_pronto !== false,
+    delivery_catalogo_personalizado: confeitariaForm.delivery_catalogo_personalizado !== false,
+    delivery_interno_pronto: confeitariaForm.delivery_interno_pronto !== false,
+    delivery_interno_personalizado: confeitariaForm.delivery_interno_personalizado !== false,
+    mensagem_confirmacao_pedido: confeitariaForm.mensagem_confirmacao_pedido || '',
     max_complementos_produto: Math.min(10, Math.max(1, Number(confeitariaForm.max_complementos_produto) || 4)),
     categorias_produto: confeitariaForm.categorias_produto,
     receber_pedidos_whatsapp: !!confeitariaForm.receber_pedidos_whatsapp,
@@ -543,7 +564,7 @@ export default function Configuracoes() {
         setActiveTab(tab);
         if (tab === 'assinaturas') trackEvent('plans_page_viewed');
       }}>
-        <TabsList className="grid w-full grid-cols-4 bg-white border-b border-gray-200 p-0 rounded-none h-auto gap-0">
+        <TabsList className="grid w-full grid-cols-5 bg-white border-b border-gray-200 p-0 rounded-none h-auto gap-0">
           <TabsTrigger
             value="geral"
             className="flex flex-col items-center justify-center gap-1 rounded-none border-b-2 border-transparent px-4 py-4 text-gray-600 hover:text-rose-600 data-[state=active]:border-rose-500 data-[state=active]:text-rose-600 data-[state=active]:bg-white transition-all"
@@ -564,6 +585,13 @@ export default function Configuracoes() {
           >
             <Package className="w-5 h-5" />
             <span className="text-xs font-medium">Produtos</span>
+          </TabsTrigger>
+          <TabsTrigger
+            value="pedidos"
+            className="flex flex-col items-center justify-center gap-1 rounded-none border-b-2 border-transparent px-4 py-4 text-gray-600 hover:text-rose-600 data-[state=active]:border-rose-500 data-[state=active]:text-rose-600 data-[state=active]:bg-white transition-all"
+          >
+            <ShoppingBag className="w-5 h-5" />
+            <span className="text-xs font-medium">Pedidos</span>
           </TabsTrigger>
           <TabsTrigger
             value="assinaturas"
@@ -714,17 +742,6 @@ export default function Configuracoes() {
                         type="number"
                         value={confeitariaForm.prazo_minimo_dias}
                         onChange={(e) => setConfeitariaForm({ ...confeitariaForm, prazo_minimo_dias: parseInt(e.target.value) || 0 })}
-                      />
-                    </div>
-                    <div>
-                      <Label>Taxa de Delivery</Label>
-                      <MoedaInput
-                        value={confeitariaForm.taxa_delivery?.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || ''}
-                        onChange={(e) => {
-                          const valor = parseFloat(e.target.value.replace(/\./g, '').replace(',', '.')) || 0;
-                          setConfeitariaForm({ ...confeitariaForm, taxa_delivery: valor });
-                        }}
-                        placeholder="0,00"
                       />
                     </div>
                   </div>
@@ -1282,6 +1299,186 @@ export default function Configuracoes() {
                 <Save className="w-4 h-4 mr-2" />
                 {updateConfeitaria.isPending ? 'Salvando...' : 'Salvar Configurações'}
               </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Pedidos */}
+        <TabsContent value="pedidos" className="mt-6">
+          <Card className="border-0 shadow-lg shadow-gray-100/50">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <ShoppingBag className="w-5 h-5 text-rose-500" />
+                Configurações de Pedidos
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Tabs defaultValue="ajustes" className="w-full">
+                <TabsList className="grid w-full grid-cols-2 mb-6 bg-rose-50/50 p-1">
+                  <TabsTrigger value="ajustes" className="data-[state=active]:bg-white data-[state=active]:text-rose-600 data-[state=active]:shadow-sm">Ajustes</TabsTrigger>
+                  <TabsTrigger value="mensagens" className="data-[state=active]:bg-white data-[state=active]:text-rose-600 data-[state=active]:shadow-sm">Mensagens</TabsTrigger>
+                </TabsList>
+
+                {/* Ajustes */}
+                <TabsContent value="ajustes" className="space-y-6 mt-0">
+                  <div className="space-y-4">
+                    <div className="flex items-start justify-between p-4 bg-gray-50 rounded-xl">
+                      <div className="flex items-start gap-3">
+                        <Truck className="w-5 h-5 text-gray-500 mt-0.5" />
+                        <div>
+                          <p className="font-medium text-gray-900">Habilitar Delivery</p>
+                          <p className="text-sm text-gray-500 mt-0.5">
+                            Permite receber pedidos com entrega. Se desativado, apenas retirada estará disponível.
+                          </p>
+                        </div>
+                      </div>
+                      <Switch
+                        checked={confeitariaForm.delivery_ativo}
+                        onCheckedChange={(v) => setConfeitariaForm({ ...confeitariaForm, delivery_ativo: v })}
+                        className="ml-4 shrink-0"
+                      />
+                    </div>
+
+                    {confeitariaForm.delivery_ativo && (
+                      <div className="space-y-4">
+                        <div>
+                          <Label>Taxa de Delivery</Label>
+                          <MoedaInput
+                            value={confeitariaForm.taxa_delivery?.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || ''}
+                            onChange={(e) => {
+                              const valor = parseFloat(e.target.value.replace(/\./g, '').replace(',', '.')) || 0;
+                              setConfeitariaForm({ ...confeitariaForm, taxa_delivery: valor });
+                            }}
+                            placeholder="0,00"
+                            className="mt-1"
+                          />
+                          <p className="text-xs text-gray-500 mt-1">Valor cobrado por pedidos com entrega</p>
+                        </div>
+
+                        <div className="space-y-2">
+                          <p className="text-sm font-medium text-gray-700">Onde o delivery está disponível:</p>
+
+                          {[
+                            { key: 'delivery_catalogo_pronto',        label: 'Catálogo — Produtos Prontos',        desc: 'Delivery disponível no catálogo público para produtos prontos' },
+                            { key: 'delivery_catalogo_personalizado', label: 'Catálogo — Produtos Personalizados', desc: 'Delivery disponível no catálogo público para produtos personalizados' },
+                            { key: 'delivery_interno_pronto',         label: 'Pedido Interno — Produtos Prontos',  desc: 'Delivery disponível ao criar pedido interno de produto pronto' },
+                            { key: 'delivery_interno_personalizado',  label: 'Pedido Interno — Personalizado',     desc: 'Delivery disponível ao criar pedido interno personalizado' },
+                          ].map(({ key, label, desc }) => (
+                            <div key={key} className="flex items-start justify-between p-3 bg-gray-50 rounded-lg">
+                              <div>
+                                <p className="text-sm font-medium text-gray-800">{label}</p>
+                                <p className="text-xs text-gray-500 mt-0.5">{desc}</p>
+                              </div>
+                              <Switch
+                                checked={confeitariaForm[key] !== false}
+                                onCheckedChange={(v) => setConfeitariaForm({ ...confeitariaForm, [key]: v })}
+                                className="ml-4 shrink-0"
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="pt-4 border-t">
+                    <Button
+                      onClick={() => updateConfeitaria.mutate()}
+                      disabled={updateConfeitaria.isPending || !confeitaria?.id}
+                      className="bg-rose-500 hover:bg-rose-600"
+                    >
+                      <Save className="w-4 h-4 mr-2" />
+                      {updateConfeitaria.isPending ? 'Salvando...' : 'Salvar Alterações'}
+                    </Button>
+                  </div>
+                </TabsContent>
+
+                {/* Mensagens */}
+                <TabsContent value="mensagens" className="space-y-6 mt-0">
+                  {(() => {
+                    const VARS = [
+                      { value: '{nome_cliente}', label: 'Nome do cliente' },
+                      { value: '{numero}', label: 'Número do pedido' },
+                      { value: '{status}', label: 'Status do pedido' },
+                      { value: '{total}', label: 'Valor total' },
+                      { value: '{data_entrega}', label: 'Data de entrega' },
+                      { value: '{forma_pagamento}', label: 'Forma de pagamento' },
+                      { value: '{tipo_entrega}', label: 'Tipo de entrega' },
+                      { value: '{nome_confeitaria}', label: 'Nome da confeitaria' },
+                    ];
+
+                    const insertVar = (varValue) => {
+                      const active = document.activeElement;
+                      if (active && active.tagName === 'TEXTAREA' && active.dataset.msgKey) {
+                        const key = active.dataset.msgKey;
+                        const start = active.selectionStart;
+                        const end = active.selectionEnd;
+                        const text = confeitariaForm[key] || '';
+                        const newText = text.slice(0, start) + varValue + text.slice(end);
+                        setConfeitariaForm({ ...confeitariaForm, [key]: newText });
+                        setTimeout(() => {
+                          active.focus();
+                          active.setSelectionRange(start + varValue.length, start + varValue.length);
+                        }, 0);
+                      }
+                    };
+
+                    return (
+                      <div className="space-y-5">
+                        <div className="flex items-start gap-2">
+                          <MessageSquare className="w-4 h-4 text-rose-500 mt-0.5" />
+                          <div>
+                            <p className="font-semibold text-gray-900">Mensagem de WhatsApp</p>
+                            <p className="text-sm text-gray-500">Essa mensagem é enviada ao clicar em "Enviar confirmação" em qualquer pedido. Use variáveis para personalizar com os dados do pedido.</p>
+                          </div>
+                        </div>
+
+                        {/* Variable chips */}
+                        <div className="space-y-2">
+                          <p className="text-xs font-medium text-gray-600">Variáveis disponíveis — clique para inserir no cursor:</p>
+                          <div className="flex flex-wrap gap-2 p-3 bg-gray-50 rounded-xl">
+                            {VARS.map((v) => (
+                              <button
+                                key={v.value}
+                                type="button"
+                                onClick={() => insertVar(v.value)}
+                                title={v.label}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-rose-50 text-rose-600 border border-rose-200 hover:bg-rose-100 transition-colors"
+                              >
+                                <span className="font-mono">{v.value}</span>
+                                <span className="text-rose-400">— {v.label}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Single message editor */}
+                        <div className="space-y-2">
+                          <Textarea
+                            data-msg-key="mensagem_confirmacao_pedido"
+                            value={confeitariaForm.mensagem_confirmacao_pedido}
+                            onChange={(e) => setConfeitariaForm({ ...confeitariaForm, mensagem_confirmacao_pedido: e.target.value })}
+                            placeholder={`Olá {nome_cliente}!\nSeu pedido *#{numero}* está com status *{status}*.\nEntrega: {data_entrega}\nTotal: R$ {total}\nObrigada pela preferência!`}
+                            className="min-h-[160px] font-mono text-sm"
+                          />
+                          <p className="text-xs text-gray-400">Deixe em branco para usar a mensagem padrão do sistema.</p>
+                        </div>
+
+                        <div className="pt-4 border-t">
+                          <Button
+                            onClick={() => updateConfeitaria.mutate()}
+                            disabled={updateConfeitaria.isPending || !confeitaria?.id}
+                            className="bg-rose-500 hover:bg-rose-600"
+                          >
+                            <Save className="w-4 h-4 mr-2" />
+                            {updateConfeitaria.isPending ? 'Salvando...' : 'Salvar Mensagem'}
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </TabsContent>
+              </Tabs>
             </CardContent>
           </Card>
         </TabsContent>

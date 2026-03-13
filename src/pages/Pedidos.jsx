@@ -10,6 +10,7 @@ import {
   Filter,
   Plus,
   Trash2,
+  Send,
   Calendar,
   CalendarDays,
   List,
@@ -101,6 +102,15 @@ export default function Pedidos() {
     }
   }, [user]);
 
+  const { data: confeitaria } = useQuery({
+    queryKey: ['confeitaria', user?.confeitaria_id],
+    queryFn: async () => {
+      const list = await appClient.entities.Confeitaria.filter({ id: user.confeitaria_id });
+      return list[0] || null;
+    },
+    enabled: !!user?.confeitaria_id,
+  });
+
   const { data: pedidos = [], isLoading } = useQuery({
     queryKey: ['pedidos', user?.confeitaria_id],
     queryFn: () => appClient.entities.Pedido.filter({ confeitaria_id: user.confeitaria_id }, '-created_date'),
@@ -153,6 +163,37 @@ export default function Pedidos() {
     const message = `Olá ${nome}, seu pedido #${num} com data para ${dataEntrega}`;
     const phone = telefone?.replace(/\D/g, '');
     window.open(`https://wa.me/55${phone}?text=${encodeURIComponent(message)}`, '_blank');
+  };
+
+  const handleEnviarConfirmacao = (pedido) => {
+    const dataEntrega = pedido.data_entrega
+      ? format(parseISO(pedido.data_entrega), "dd/MM/yyyy", { locale: ptBR })
+      : 'a combinar';
+    const tipoEntrega = pedido.tipo_entrega === 'entrega' || pedido.tipo_entrega === 'delivery'
+      ? 'Delivery'
+      : pedido.tipo_entrega === 'retirada'
+      ? 'Retirada'
+      : pedido.tipo_entrega || '';
+    const statusLabel = statusConfig[pedido.status]?.label || pedido.status || '';
+
+    const defaultTemplate = `Ol\u00E1 {nome_cliente}!\nSeu pedido *#{numero}* est\u00E1 com status *{status}*.\nEntrega: {data_entrega}\nTotal: R$ {total}\nObrigada pela prefer\u00EAncia!`;
+    const template = confeitaria?.mensagem_confirmacao_pedido || defaultTemplate;
+
+    const message = template
+      .replace(/{nome_cliente}/g, pedido.cliente_nome || '')
+      .replace(/{numero}/g, `${pedido.numero || ''}`)
+      .replace(/{status}/g, statusLabel)
+      .replace(/{total}/g, (pedido.valor_total || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 }))
+      .replace(/{data_entrega}/g, dataEntrega)
+      .replace(/{forma_pagamento}/g, pedido.forma_pagamento || '')
+      .replace(/{tipo_entrega}/g, tipoEntrega)
+      .replace(/{nome_confeitaria}/g, confeitaria?.nome || '');
+
+    const phone = pedido.cliente_telefone?.replace(/\D/g, '');
+    const url = phone
+      ? `https://wa.me/55${phone}?text=${encodeURIComponent(message)}`
+      : `https://wa.me/?text=${encodeURIComponent(message)}`;
+    window.open(url, '_blank');
   };
 
   if (!user) return null;
@@ -404,6 +445,16 @@ export default function Pedidos() {
                             >
                               <Pencil className="w-4 h-4 mr-2" />
                               Editar
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              className="cursor-pointer text-green-700 hover:bg-green-50 hover:text-green-800 transition-colors"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleEnviarConfirmacao(pedido);
+                              }}
+                            >
+                              <Send className="w-4 h-4 mr-2" />
+                              Enviar confirmação
                             </DropdownMenuItem>
                             <DropdownMenuItem
                               className="text-red-600 cursor-pointer hover:bg-red-50 hover:text-red-700 transition-colors"
