@@ -15,7 +15,6 @@ import {
   CalendarDays,
   List,
   ChevronDown,
-  MessageCircle,
   ArrowRight,
   Pencil,
   ShoppingBag
@@ -401,18 +400,19 @@ export default function Pedidos() {
                             variant="ghost"
                             size="icon"
                             className="text-green-600 hover:bg-green-50"
+                            title="Enviar confirmação via WhatsApp"
                             onClick={(e) => {
                               e.stopPropagation();
-                              handleWhatsApp(pedido.cliente_telefone, pedido);
+                              handleEnviarConfirmacao(pedido);
                             }}
                           >
-                            <MessageCircle className="w-4 h-4" />
+                            <Send className="w-4 h-4" />
                           </Button>
                         )}
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button 
-                              variant="ghost" 
+                            <Button
+                              variant="ghost"
                               size="icon"
                               onClick={(e) => e.stopPropagation()}
                             >
@@ -445,16 +445,6 @@ export default function Pedidos() {
                             >
                               <Pencil className="w-4 h-4 mr-2" />
                               Editar
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              className="cursor-pointer text-green-700 hover:bg-green-50 hover:text-green-800 transition-colors"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleEnviarConfirmacao(pedido);
-                              }}
-                            >
-                              <Send className="w-4 h-4 mr-2" />
-                              Enviar confirmação
                             </DropdownMenuItem>
                             <DropdownMenuItem
                               className="text-red-600 cursor-pointer hover:bg-red-50 hover:text-red-700 transition-colors"
