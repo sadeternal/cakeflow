@@ -131,9 +131,7 @@ export default function AssinaturasTab({ confeitaria, onUpdate }) {
     ['active', 'canceling', 'past_due', 'incomplete', 'trial'].includes(status);
 
   const buildBillingReturnUrl = () => {
-    const returnUrl = new URL(`${window.location.origin}/Configuracoes`);
-    returnUrl.searchParams.set('tab', 'assinaturas');
-    return returnUrl.toString();
+    return `${window.location.origin}/Assinatura`;
   };
 
   const handleOpenBilling = async () => {

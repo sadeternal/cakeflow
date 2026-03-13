@@ -49,6 +49,7 @@
  */
 import AdminPanel from './pages/AdminPanel';
 import AdminProspeccao from './pages/AdminProspeccao';
+import Assinatura from './pages/Assinatura';
 import Catalogo from './pages/Catalogo';
 import Clientes from './pages/Clientes';
 import Configuracoes from './pages/Configuracoes';
@@ -68,6 +69,7 @@ export const PAGES = {
     "AdminPanel": AdminPanel,
     "AdminProspeccao": AdminProspeccao,
     "AjusteUsuario": AjusteUsuario,
+    "Assinatura": Assinatura,
     "Catalogo": Catalogo,
     "Clientes": Clientes,
     "Configuracoes": Configuracoes,

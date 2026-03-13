@@ -14,7 +14,6 @@ import {
   Upload,
   X,
   CreditCard,
-  Sparkles,
   ArrowUp,
   ArrowDown,
   Eye,
@@ -24,7 +23,6 @@ import {
   Truck,
   MessageSquare,
 } from 'lucide-react';
-import AssinaturasTab from '@/components/configuracoes/AssinaturasTab';
 import { useEventTracker } from '@/lib/useEventTracker';
 import { useTour } from '@/lib/TourContext';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -562,9 +560,8 @@ export default function Configuracoes() {
     <div className="space-y-6">
       <Tabs value={activeTab} onValueChange={(tab) => {
         setActiveTab(tab);
-        if (tab === 'assinaturas') trackEvent('plans_page_viewed');
       }}>
-        <TabsList className="grid w-full grid-cols-5 bg-white border-b border-gray-200 p-0 rounded-none h-auto gap-0">
+        <TabsList className="grid w-full grid-cols-4 bg-white border-b border-gray-200 p-0 rounded-none h-auto gap-0">
           <TabsTrigger
             value="geral"
             className="flex flex-col items-center justify-center gap-1 rounded-none border-b-2 border-transparent px-4 py-4 text-gray-600 hover:text-rose-600 data-[state=active]:border-rose-500 data-[state=active]:text-rose-600 data-[state=active]:bg-white transition-all"
@@ -592,13 +589,6 @@ export default function Configuracoes() {
           >
             <ShoppingBag className="w-5 h-5" />
             <span className="text-xs font-medium">Pedidos</span>
-          </TabsTrigger>
-          <TabsTrigger
-            value="assinaturas"
-            className="flex flex-col items-center justify-center gap-1 rounded-none border-b-2 border-transparent px-4 py-4 text-gray-600 hover:text-rose-600 data-[state=active]:border-rose-500 data-[state=active]:text-rose-600 data-[state=active]:bg-white transition-all"
-          >
-            <Sparkles className="w-5 h-5" />
-            <span className="text-xs font-medium">Assin.</span>
           </TabsTrigger>
         </TabsList>
 
@@ -1483,16 +1473,6 @@ export default function Configuracoes() {
           </Card>
         </TabsContent>
 
-        {/* Assinaturas */}
-        <TabsContent value="assinaturas" className="mt-6">
-          <AssinaturasTab
-            confeitaria={confeitaria}
-            onUpdate={async () => {
-              await refetchConfeitaria();
-              queryClient.invalidateQueries({ queryKey: ['confeitaria'] });
-            }}
-          />
-        </TabsContent>
       </Tabs>
 
       {/* Item Form Dialog */}

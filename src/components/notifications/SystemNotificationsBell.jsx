@@ -19,7 +19,8 @@ import {
   SheetContent,
   SheetDescription,
   SheetHeader,
-  SheetTitle
+  SheetTitle,
+  SheetTrigger
 } from '@/components/ui/sheet';
 import { useToast } from '@/components/ui/use-toast';
 
@@ -292,11 +293,11 @@ export default function SystemNotificationsBell() {
       `}</style>
 
       <Sheet open={open} onOpenChange={setOpen}>
+        <SheetTrigger asChild>
         <Button
           type="button"
           variant="ghost"
           size="icon"
-          onClick={() => setOpen(true)}
           className="relative rounded-xl text-gray-600 hover:bg-rose-50 hover:text-rose-600"
         >
           <Bell
@@ -309,6 +310,7 @@ export default function SystemNotificationsBell() {
             </span>
           )}
         </Button>
+        </SheetTrigger>
 
         <SheetContent side="right" className="w-full sm:max-w-md p-0">
           <div className="flex h-full flex-col">

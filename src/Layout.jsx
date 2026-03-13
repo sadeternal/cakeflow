@@ -23,7 +23,8 @@ import {
   MessageCircle,
   ShieldCheck,
   Ban,
-  HelpCircle } from
+  HelpCircle,
+  CreditCard } from
 'lucide-react';
 import TrialExpiredModal from '@/components/TrialExpiredModal';
 import SystemNotificationsBell from '@/components/notifications/SystemNotificationsBell';
@@ -47,6 +48,7 @@ const PAGE_TITLE_BY_ROUTE = {
   Relatorios: 'Relatorios',
   Configuracoes: 'Configuracoes',
   AjusteUsuario: 'Ajuste de Usuário',
+  Assinatura: 'Assinatura',
   Suporte: 'Suporte',
   Onboarding: 'Onboarding',
   AdminPanel: 'Painel Admin',
@@ -281,40 +283,6 @@ export default function Layout({ children, currentPageName }) {
             })}
           </nav>
 
-          {/* User section */}
-          {user &&
-          <div className="p-4 border-t border-rose-100">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-rose-50 transition-colors">
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-rose-400 to-rose-500 flex items-center justify-center text-white font-semibold">
-                      {user.full_name?.[0]?.toUpperCase() || 'U'}
-                    </div>
-                    <div className="flex-1 text-left">
-                      <p className="text-sm font-medium text-gray-900 truncate">
-                        {user.full_name || 'Usuário'}
-                      </p>
-                      <p className="text-xs text-gray-500 truncate">{user.email}</p>
-                    </div>
-                    <ChevronDown className="w-4 h-4 text-gray-400" />
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-56">
-                  <DropdownMenuItem asChild>
-                    <Link to={createPageUrl('AjusteUsuario')}>
-                      <Settings className="w-4 h-4 mr-2" />
-                      Ajuste de Usuário
-                    </Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={handleLogout} className="text-red-600">
-                    <LogOut className="w-4 h-4 mr-2" />
-                    Sair
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          }
         </div>
       </aside>
 
@@ -339,6 +307,48 @@ export default function Layout({ children, currentPageName }) {
             <div className="flex items-center gap-2">
               <TourHelpButton />
               <SystemNotificationsBell />
+              {user && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button className="flex items-center gap-2 px-2 py-0 rounded-xl hover:bg-rose-50 transition-colors h-9 outline-none">
+                      <div className="w-9 h-9 rounded-full shrink-0 overflow-hidden border border-rose-100">
+                        {confeitaria?.logo_url
+                          ? <img src={confeitaria.logo_url} alt="Logo" className="w-full h-full object-cover" />
+                          : <div className="w-full h-full bg-gradient-to-br from-rose-400 to-rose-500 flex items-center justify-center text-white font-semibold text-sm">
+                              {(confeitaria?.nome || user.full_name)?.[0]?.toUpperCase() || 'C'}
+                            </div>
+                        }
+                      </div>
+                      <div className="hidden sm:block text-left">
+                        <p className="text-sm font-medium text-gray-900 leading-tight truncate max-w-[120px]">
+                          {confeitaria?.nome || user.full_name || 'Usuário'}
+                        </p>
+                        <p className="text-xs text-gray-500 truncate max-w-[120px]">{user.email}</p>
+                      </div>
+                      <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-56">
+                    <DropdownMenuItem asChild>
+                      <Link to={createPageUrl('AjusteUsuario')}>
+                        <Settings className="w-4 h-4 mr-2" />
+                        Ajuste de Usuário
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link to={createPageUrl('Assinatura')}>
+                        <CreditCard className="w-4 h-4 mr-2" />
+                        Assinatura
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={handleLogout} className="text-red-600">
+                      <LogOut className="w-4 h-4 mr-2" />
+                      Sair
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
             </div>
           </div>
         </header>
