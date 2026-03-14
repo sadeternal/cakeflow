@@ -154,6 +154,7 @@ export default function Configuracoes() {
       { value: 'bebida', label: 'Bebida' },
       { value: 'outro', label: 'Outro' },
     ],
+    catalogo_ativo: true,
     receber_pedidos_whatsapp: true,
     exibir_pedido_personalizado: true,
     frase_pedido_personalizado: 'Monte seu Bolo Personalizado',
@@ -213,6 +214,7 @@ export default function Configuracoes() {
               { value: 'bebida', label: 'Bebida' },
               { value: 'outro', label: 'Outro' },
             ],
+          catalogo_ativo: conf.catalogo_ativo !== false,
           receber_pedidos_whatsapp: conf.receber_pedidos_whatsapp !== false,
           exibir_pedido_personalizado: conf.exibir_pedido_personalizado !== false,
           frase_pedido_personalizado: conf.frase_pedido_personalizado || 'Monte seu Bolo Personalizado',
@@ -254,6 +256,7 @@ export default function Configuracoes() {
     mensagem_confirmacao_pedido: confeitariaForm.mensagem_confirmacao_pedido || '',
     max_complementos_produto: Math.min(10, Math.max(1, Number(confeitariaForm.max_complementos_produto) || 4)),
     categorias_produto: confeitariaForm.categorias_produto,
+    catalogo_ativo: !!confeitariaForm.catalogo_ativo,
     receber_pedidos_whatsapp: !!confeitariaForm.receber_pedidos_whatsapp,
     exibir_pedido_personalizado: !!confeitariaForm.exibir_pedido_personalizado,
     frase_pedido_personalizado: confeitariaForm.frase_pedido_personalizado || '',
@@ -1019,6 +1022,23 @@ export default function Configuracoes() {
                         </div>
                       );
                     })()}
+                  </div>
+
+                  <div className="pt-4 border-t">
+                    <h4 className="font-semibold text-gray-900 mb-4">Disponibilidade</h4>
+                    <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-200">
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">Catálogo online ativo</p>
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          Quando desativado, clientes verão uma mensagem de catálogo indisponível
+                        </p>
+                      </div>
+                      <Switch
+                        checked={confeitariaForm.catalogo_ativo}
+                        onCheckedChange={(checked) => setConfeitariaForm({ ...confeitariaForm, catalogo_ativo: checked })}
+                        className="data-[state=checked]:bg-rose-500 ml-4"
+                      />
+                    </div>
                   </div>
 
                   <div className="pt-4 border-t">

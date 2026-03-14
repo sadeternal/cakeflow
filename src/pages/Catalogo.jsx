@@ -12,7 +12,8 @@ import {
   MessageCircle,
   ShoppingCart,
   Clock,
-  Search
+  Search,
+  AlertTriangle
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -207,7 +208,51 @@ export default function Catalogo() {
     );
   }
 
+  if (confeitaria.catalogo_ativo === false) {
+    const corPrincipal = confeitaria.cor_principal || '#ec4899';
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-rose-50 to-amber-50 flex items-center justify-center p-4">
+        <Card className="max-w-sm w-full text-center border-0 shadow-xl">
+          <CardContent className="p-8 space-y-4">
+            {confeitaria.logo_url ? (
+              <img src={confeitaria.logo_url} alt={confeitaria.nome} className="h-20 w-20 rounded-full object-cover mx-auto border-4 border-white shadow-md" />
+            ) : (
+              <div className="h-20 w-20 rounded-full flex items-center justify-center mx-auto" style={{ backgroundColor: corPrincipal }}>
+                <Store className="w-10 h-10 text-white" />
+              </div>
+            )}
+            <div>
+              <h1 className="text-xl font-bold text-gray-900">{confeitaria.nome}</h1>
+              <p className="text-sm text-gray-500 mt-1">Catálogo temporariamente indisponível</p>
+            </div>
+            <p className="text-sm text-gray-500">
+              No momento não estamos aceitando pedidos online. Entre em contato para mais informações.
+            </p>
+            {confeitaria.telefone && (
+              <button
+                onClick={() => window.open(`https://wa.me/55${confeitaria.telefone.replace(/\D/g, '')}`, '_blank')}
+                className="w-full py-2.5 px-4 rounded-xl text-white text-sm font-semibold bg-green-500 hover:bg-green-600 transition-colors flex items-center justify-center gap-2"
+              >
+                <MessageCircle className="w-4 h-4" />
+                Falar pelo WhatsApp
+              </button>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   const corPrincipal = confeitaria.cor_principal || '#ec4899';
+
+  // Verificar se hoje é dia de funcionamento
+  const DIAS_SEMANA = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'];
+  const diaHoje = DIAS_SEMANA[new Date().getDay()];
+  const diasFuncionamento = confeitaria.dias_funcionamento;
+  const fora_do_horario =
+    Array.isArray(diasFuncionamento) &&
+    diasFuncionamento.length > 0 &&
+    !diasFuncionamento.includes(diaHoje);
 
   return (
     <div className="min-h-screen bg-white flex flex-col">
@@ -321,6 +366,20 @@ export default function Catalogo() {
       </header>
 
       <main className="max-w-6xl mx-auto px-3 sm:px-4 py-4 sm:py-8 flex-1">
+        {/* Banner: fora do dia de funcionamento */}
+        {fora_do_horario && (
+          <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 mb-4 text-amber-800">
+            <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5 text-amber-500" />
+            <div>
+              <p className="text-sm font-semibold">Estamos fechados hoje</p>
+              <p className="text-xs text-amber-700 mt-0.5">
+                Funcionamos {diasFuncionamento.map(d => d.charAt(0).toUpperCase() + d.slice(1)).join(', ')}.
+                Você ainda pode conferir nossos produtos, mas pedidos serão processados no próximo dia útil.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Sobre - Mobile apenas */}
         {(confeitaria.endereco || confeitaria.horario_funcionamento?.inicio || confeitaria.telefone) && (
           <Card className="mb-4 sm:hidden border-0 shadow-lg">
