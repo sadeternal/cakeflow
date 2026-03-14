@@ -54,6 +54,7 @@ export default function CalendarioPedidos({
   confeitariaId,
   onPedidoClick,
   onDiaClick,
+  hideNavigation = false,
 }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -334,7 +335,7 @@ export default function CalendarioPedidos({
 
   return (
     <div className="space-y-4">
-      <Navegacao />
+      {!hideNavigation && <Navegacao />}
 
       {/* ── Mobile: agenda ── */}
       <div className="md:hidden space-y-1.5">

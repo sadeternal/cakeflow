@@ -3,7 +3,11 @@ import { appClient } from '@/api/appClient';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { createPageUrl } from '@/utils';
 import { useAuth } from '@/lib/AuthContext';
-import { format, parseISO } from 'date-fns';
+import {
+  format, parseISO,
+  addMonths, subMonths, startOfMonth, endOfMonth,
+  getMonth, getYear, setMonth, setYear,
+} from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
   Search,
@@ -15,9 +19,12 @@ import {
   CalendarDays,
   List,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   ArrowRight,
   Pencil,
-  ShoppingBag
+  ShoppingBag,
+  XCircle
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -71,6 +78,13 @@ const PEDIDOS_TOUR_SLIDES = [
   },
 ];
 
+const MESES = [
+  'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+  'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro',
+];
+const ANO_ATUAL = new Date().getFullYear();
+const ANOS = Array.from({ length: 6 }, (_, i) => ANO_ATUAL - 2 + i);
+
 const statusConfig = {
   orcamento: { label: 'Orçamento', color: 'bg-gray-100 text-gray-700 border-gray-200', next: 'aprovado' },
   aprovado: { label: 'Aprovado', color: 'bg-blue-100 text-blue-700 border-blue-200', next: 'producao' },
@@ -88,8 +102,8 @@ export default function Pedidos() {
   const [selectedPedido, setSelectedPedido] = useState(null);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [pedidoToDelete, setPedidoToDelete] = useState(null);
-  const [dataInicio, setDataInicio] = useState('');
-  const [dataFim, setDataFim] = useState('');
+  const [showCancelDialog, setShowCancelDialog] = useState(false);
+  const [pedidoToCancel, setPedidoToCancel] = useState(null);
   const [vistaCalendario, setVistaCalendario] = useState(false);
   const [mesCalendario, setMesCalendario] = useState(new Date());
   const [pedidoDiaDialog, setPedidoDiaDialog] = useState(null);
@@ -143,13 +157,26 @@ export default function Pedidos() {
     },
   });
 
+  const inicioMes = startOfMonth(mesCalendario);
+  const fimMes = endOfMonth(mesCalendario);
+
+  const pedidosDoMes = pedidos.filter(pedido => {
+    const dataRef = pedido.data_entrega || pedido.created_date;
+    if (!dataRef) return false;
+    const d = parseISO(dataRef);
+    return d >= inicioMes && d <= fimMes;
+  });
+
   const filteredPedidos = pedidos.filter(pedido => {
     const matchesSearch =
       pedido.cliente_nome?.toLowerCase().includes(search.toLowerCase()) ||
       pedido.numero?.toLowerCase().includes(search.toLowerCase());
     const matchesStatus = statusFilter === 'todos' || pedido.status === statusFilter;
-    if (dataInicio && pedido.data_entrega && pedido.data_entrega.slice(0, 10) < dataInicio) return false;
-    if (dataFim && pedido.data_entrega && pedido.data_entrega.slice(0, 10) > dataFim) return false;
+    // Filter by selected month using data_entrega, or created_date if no delivery date
+    const dataRef = pedido.data_entrega || pedido.created_date;
+    if (!dataRef) return false;
+    const d = parseISO(dataRef);
+    if (d < inicioMes || d > fimMes) return false;
     return matchesSearch && matchesStatus;
   });
 
@@ -229,29 +256,40 @@ export default function Pedidos() {
             </SelectContent>
           </Select>
 
-          {/* Datas */}
-          <div className="flex items-center gap-2">
-            <input
-              type="date"
-              value={dataInicio}
-              onChange={e => setDataInicio(e.target.value)}
-              className="flex-1 h-11 border border-gray-200 rounded-md px-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-rose-300 min-w-0"
-            />
-            <span className="text-gray-400 text-sm shrink-0">até</span>
-            <input
-              type="date"
-              value={dataFim}
-              onChange={e => setDataFim(e.target.value)}
-              className="flex-1 h-11 border border-gray-200 rounded-md px-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-rose-300 min-w-0"
-            />
-            {(dataInicio || dataFim) && (
-              <button
-                onClick={() => { setDataInicio(''); setDataFim(''); }}
-                className="text-xs text-gray-400 hover:text-gray-600 shrink-0"
-              >
-                Limpar
-              </button>
-            )}
+          {/* Navegação de mês */}
+          <div className="flex items-center gap-1.5 w-full sm:w-auto">
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-11 w-11 shrink-0 border-rose-200 text-rose-500 hover:bg-rose-50 hover:text-rose-600"
+              onClick={() => setMesCalendario(m => subMonths(m, 1))}
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </Button>
+            <Select value={String(getMonth(mesCalendario))} onValueChange={(v) => setMesCalendario(m => setMonth(m, parseInt(v)))}>
+              <SelectTrigger className="flex-1 sm:w-32 h-11">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {MESES.map((m, i) => <SelectItem key={i} value={String(i)}>{m}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={String(getYear(mesCalendario))} onValueChange={(v) => setMesCalendario(m => setYear(m, parseInt(v)))}>
+              <SelectTrigger className="w-24 h-11 shrink-0">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {ANOS.map(a => <SelectItem key={a} value={String(a)}>{a}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-11 w-11 shrink-0 border-rose-200 text-rose-500 hover:bg-rose-50 hover:text-rose-600"
+              onClick={() => setMesCalendario(m => addMonths(m, 1))}
+            >
+              <ChevronRight className="w-4 h-4" />
+            </Button>
           </div>
         </div>
 
@@ -286,10 +324,10 @@ export default function Pedidos() {
           onClick={() => setStatusFilter('todos')}
           className={statusFilter === 'todos' ? 'bg-gray-900' : ''}
         >
-          Todos ({pedidos.length})
+          Todos ({pedidosDoMes.length})
         </Button>
         {Object.entries(statusConfig).map(([key, { label, color }]) => {
-          const count = pedidos.filter(p => p.status === key).length;
+          const count = pedidosDoMes.filter(p => p.status === key).length;
           return (
             <Button
               key={key}
@@ -314,6 +352,7 @@ export default function Pedidos() {
           onPedidoClick={(p) => setSelectedPedido(p)}
           onDeletePedido={(p) => { setPedidoToDelete(p); setShowDeleteDialog(true); }}
           onDiaClick={(dataStr) => setPedidoDiaDialog(dataStr)}
+          hideNavigation
         />
       )}
 
@@ -446,6 +485,19 @@ export default function Pedidos() {
                               <Pencil className="w-4 h-4 mr-2" />
                               Editar
                             </DropdownMenuItem>
+                            {pedido.status !== 'cancelado' && (
+                              <DropdownMenuItem
+                                className="text-orange-600 cursor-pointer hover:bg-orange-50 hover:text-orange-700 transition-colors"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setPedidoToCancel(pedido);
+                                  setShowCancelDialog(true);
+                                }}
+                              >
+                                <XCircle className="w-4 h-4 mr-2" />
+                                Cancelar pedido
+                              </DropdownMenuItem>
+                            )}
                             <DropdownMenuItem
                               className="text-red-600 cursor-pointer hover:bg-red-50 hover:text-red-700 transition-colors"
                               onClick={(e) => {
@@ -492,6 +544,43 @@ export default function Pedidos() {
           }}
         />
       )}
+
+      {/* Cancel Dialog */}
+      <Dialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Cancelar Pedido</DialogTitle>
+          </DialogHeader>
+          <p className="text-gray-600">
+            Tem certeza que deseja cancelar o pedido de <strong>{pedidoToCancel?.cliente_nome}</strong>?
+          </p>
+          {pedidoToCancel?.tipo === 'produto_pronto' && pedidoToCancel?.produtos_catalogo?.length > 0 && (
+            <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+              O estoque dos produtos será restaurado automaticamente.
+            </p>
+          )}
+          <p className="text-sm text-gray-500">
+            O valor do pedido será removido do financeiro.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowCancelDialog(false)}>
+              Voltar
+            </Button>
+            <Button
+              className="bg-orange-500 hover:bg-orange-600 text-white"
+              onClick={() => {
+                updateStatusMutation.mutate({ id: pedidoToCancel.id, status: 'cancelado' });
+                setShowCancelDialog(false);
+                setPedidoToCancel(null);
+              }}
+              disabled={updateStatusMutation.isPending}
+            >
+              <XCircle className="w-4 h-4 mr-2" />
+              Confirmar cancelamento
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Delete Dialog */}
       <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>

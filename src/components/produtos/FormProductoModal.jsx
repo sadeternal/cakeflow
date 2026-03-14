@@ -48,6 +48,7 @@ const FORM_INICIAL = {
   categoria: 'bolo',
   foto_url: '',
   disponivel: true,
+  quantidade: null,
 };
 
 export default function FormProductoModal({ open, onOpenChange, editingProduto, onSave, isSaving, maxComplementos = 4, categorias = DEFAULT_CATEGORIAS }) {
@@ -68,6 +69,7 @@ export default function FormProductoModal({ open, onOpenChange, editingProduto, 
         categoria: editingProduto.categoria || 'bolo',
         foto_url: editingProduto.foto_url || '',
         disponivel: editingProduto.disponivel !== false,
+        quantidade: editingProduto.quantidade ?? null,
       });
       setLimiteComplementos(editingProduto.limite_complementos ?? null);
 
@@ -132,6 +134,7 @@ export default function FormProductoModal({ open, onOpenChange, editingProduto, 
       preco: parseFloat(formData.preco) || 0,
       complementos: complementosFiltrados,
       limite_complementos: limiteComplementos ? Math.min(maxComplementos, Math.max(1, Number(limiteComplementos))) : null,
+      quantidade: formData.quantidade,
     });
   };
 
@@ -237,38 +240,75 @@ export default function FormProductoModal({ open, onOpenChange, editingProduto, 
               </div>
             </div>
 
-            <div>
-              <Label>Foto</Label>
-              <div className="mt-1.5">
-                {formData.foto_url ? (
-                  <div className="relative w-32 h-32 rounded-lg overflow-hidden">
-                    <img
-                      src={formData.foto_url}
-                      alt="Preview"
-                      className="w-full h-full object-cover"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setFormData({ ...formData, foto_url: '' })}
-                      className="absolute top-1 right-1 w-6 h-6 rounded-full bg-red-500 text-white flex items-center justify-center text-sm leading-none"
-                    >
-                      ×
-                    </button>
-                  </div>
-                ) : (
-                  <label className="flex items-center justify-center w-32 h-32 border-2 border-dashed border-gray-200 rounded-lg cursor-pointer hover:border-rose-300 transition-colors">
-                    <div className="text-center">
-                      <ImageIcon className="w-8 h-8 text-gray-400 mx-auto mb-1" />
-                      <span className="text-xs text-gray-500">Adicionar</span>
+            <div className="grid grid-cols-2 gap-4 items-start">
+              <div>
+                <Label>Foto</Label>
+                <div className="mt-1.5">
+                  {formData.foto_url ? (
+                    <div className="relative w-32 h-32 rounded-lg overflow-hidden">
+                      <img
+                        src={formData.foto_url}
+                        alt="Preview"
+                        className="w-full h-full object-cover"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setFormData({ ...formData, foto_url: '' })}
+                        className="absolute top-1 right-1 w-6 h-6 rounded-full bg-red-500 text-white flex items-center justify-center text-sm leading-none"
+                      >
+                        ×
+                      </button>
                     </div>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      onChange={handleImageUpload}
+                  ) : (
+                    <label className="flex items-center justify-center w-32 h-32 border-2 border-dashed border-gray-200 rounded-lg cursor-pointer hover:border-rose-300 transition-colors">
+                      <div className="text-center">
+                        <ImageIcon className="w-8 h-8 text-gray-400 mx-auto mb-1" />
+                        <span className="text-xs text-gray-500">Adicionar</span>
+                      </div>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={handleImageUpload}
+                      />
+                    </label>
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <div className="p-3 bg-gray-50 rounded-lg border border-gray-200 space-y-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">Controlar estoque</p>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        {formData.quantidade === null ? 'Sem limite' : `${formData.quantidade} un.`}
+                      </p>
+                    </div>
+                    <Switch
+                      checked={formData.quantidade !== null}
+                      onCheckedChange={(checked) =>
+                        setFormData({ ...formData, quantidade: checked ? 0 : null })
+                      }
+                      className="data-[state=checked]:bg-rose-500 shrink-0"
                     />
-                  </label>
-                )}
+                  </div>
+                  {formData.quantidade !== null && (
+                    <div className="flex items-center gap-2">
+                      <Label className="text-xs text-gray-600 shrink-0">Qtd.</Label>
+                      <Input
+                        type="number"
+                        min={0}
+                        className="w-20 h-8 text-center text-sm"
+                        value={formData.quantidade}
+                        onChange={(e) => {
+                          const val = parseInt(e.target.value);
+                          setFormData({ ...formData, quantidade: isNaN(val) ? 0 : Math.max(0, val) });
+                        }}
+                      />
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 

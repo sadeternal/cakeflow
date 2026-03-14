@@ -310,8 +310,10 @@ export default function NovoPedido() {
     };
 
     if (tipoPedido === 'produto_pronto') {
+      // eslint-disable-next-line no-unused-vars
+      const { deseja_doces, deseja_salgados, ...cleanBase } = basePayload;
       return {
-        ...basePayload,
+        ...cleanBase,
         numero: null,
         status: 'orcamento',
         tipo: 'produto_pronto',
@@ -473,18 +475,27 @@ export default function NovoPedido() {
     setCarrinho(prev => {
       const existing = prev.find(p => p.id === produto.id);
       if (existing) {
+        const estoqueMax = existing.quantidade_estoque;
+        if (estoqueMax !== null && existing.quantidade >= estoqueMax) return prev;
         return prev.map(p => p.id === produto.id ? { ...p, quantidade: p.quantidade + 1 } : p);
       }
-      return [...prev, { id: produto.id, nome: produto.nome, preco: produto.preco || 0, quantidade: 1 }];
+      return [...prev, {
+        id: produto.id,
+        nome: produto.nome,
+        preco: produto.preco || 0,
+        quantidade: 1,
+        quantidade_estoque: produto.quantidade ?? null,
+      }];
     });
   };
 
   const adicionarComComplementos = (item) => {
+    const quantidade_estoque = produtoCustomizando?.quantidade ?? null;
     if (editandoItemCarrinho) {
-      setCarrinho(prev => prev.map(i => i === editandoItemCarrinho ? item : i));
+      setCarrinho(prev => prev.map(i => i === editandoItemCarrinho ? { ...item, quantidade_estoque } : i));
       setEditandoItemCarrinho(null);
     } else {
-      setCarrinho(prev => [...prev, item]);
+      setCarrinho(prev => [...prev, { ...item, quantidade_estoque }]);
     }
   };
 
@@ -498,7 +509,11 @@ export default function NovoPedido() {
 
   const updateQuantidade = (produtoId, delta) => {
     setCarrinho(prev => prev
-      .map(p => p.id === produtoId ? { ...p, quantidade: p.quantidade + delta } : p)
+      .map(p => {
+        if (p.id !== produtoId) return p;
+        if (delta > 0 && p.quantidade_estoque !== null && p.quantidade >= p.quantidade_estoque) return p;
+        return { ...p, quantidade: p.quantidade + delta };
+      })
       .filter(p => p.quantidade > 0)
     );
   };
@@ -1254,7 +1269,13 @@ export default function NovoPedido() {
                           <Minus className="w-3 h-3" />
                         </Button>
                         <span className="text-sm font-medium w-6 text-center">{item.quantidade}</span>
-                        <Button size="icon" variant="ghost" className="w-7 h-7" onClick={() => updateQuantidade(item.id, 1)}>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="w-7 h-7"
+                          disabled={item.quantidade_estoque !== null && item.quantidade >= item.quantidade_estoque}
+                          onClick={() => updateQuantidade(item.id, 1)}
+                        >
                           <Plus className="w-3 h-3" />
                         </Button>
                         {item.complementos_selecionados?.length > 0 && (
@@ -1276,44 +1297,49 @@ export default function NovoPedido() {
               )}
 
               <div className="space-y-2 max-h-64 overflow-y-auto">
-                {filteredProdutos.map((produto) => (
-                  <button
-                    key={produto.id}
-                    onClick={() => handleClickProduto(produto)}
-                    className="w-full flex items-center justify-between p-4 rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors text-left"
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-14 h-14 rounded-xl bg-white border overflow-hidden shrink-0">
-                        {produto.foto_url ? (
-                          <img
-                            src={produto.foto_url}
-                            alt={produto.nome}
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center bg-rose-50 text-rose-300">
-                            <Package className="w-5 h-5" />
-                          </div>
-                        )}
+                {filteredProdutos.map((produto) => {
+                  const semEstoque = produto.quantidade === 0;
+                  return (
+                    <button
+                      key={produto.id}
+                      onClick={() => !semEstoque && handleClickProduto(produto)}
+                      disabled={semEstoque}
+                      className={`w-full flex items-center justify-between p-4 rounded-xl text-left transition-colors ${semEstoque ? 'bg-gray-50 opacity-60 cursor-not-allowed' : 'bg-gray-50 hover:bg-gray-100'}`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-14 h-14 rounded-xl bg-white border overflow-hidden shrink-0 relative">
+                          {produto.foto_url ? (
+                            <img
+                              src={produto.foto_url}
+                              alt={produto.nome}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center bg-rose-50 text-rose-300">
+                              <Package className="w-5 h-5" />
+                            </div>
+                          )}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-medium text-gray-900">{produto.nome}</p>
+                          {produto.descricao && <p className="text-sm text-gray-500 line-clamp-2">{produto.descricao}</p>}
+                          {semEstoque && <p className="text-xs text-red-500 font-medium mt-0.5">Sem estoque</p>}
+                        </div>
                       </div>
-                      <div className="min-w-0">
-                        <p className="font-medium text-gray-900">{produto.nome}</p>
-                        {produto.descricao && <p className="text-sm text-gray-500 line-clamp-2">{produto.descricao}</p>}
+                      <div className="flex items-center gap-2">
+                        <div className="text-right">
+                          <span className="font-bold text-rose-600 block">
+                            R$ {(produto.preco || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </span>
+                          {produto.complementos?.length > 0 && !semEstoque && (
+                            <span className="text-xs text-rose-400">+ complementos</span>
+                          )}
+                        </div>
+                        {!semEstoque && <Plus className="w-4 h-4 text-gray-400" />}
                       </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="text-right">
-                        <span className="font-bold text-rose-600 block">
-                          R$ {(produto.preco || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                        </span>
-                        {produto.complementos?.length > 0 && (
-                          <span className="text-xs text-rose-400">+ complementos</span>
-                        )}
-                      </div>
-                      <Plus className="w-4 h-4 text-gray-400" />
-                    </div>
-                  </button>
-                ))}
+                    </button>
+                  );
+                })}
                 {filteredProdutos.length === 0 && (
                   <p className="text-gray-500 text-center py-4">Nenhum produto encontrado</p>
                 )}

@@ -208,6 +208,12 @@ export default function ProdutosProntosTab({ user }) {
                           {produto.complementos.length} compl.
                         </Badge>
                       )}
+                      {produto.quantidade === 0 && (
+                        <Badge className="bg-red-100 text-red-600 border-0 text-xs px-1.5 py-0">Sem estoque</Badge>
+                      )}
+                      {produto.quantidade !== null && produto.quantidade > 0 && (
+                        <Badge className="bg-green-100 text-green-700 border-0 text-xs px-1.5 py-0">{produto.quantidade} un.</Badge>
+                      )}
                     </div>
                     {produto.descricao && (
                       <p className="text-xs text-gray-400 truncate mt-0.5">{produto.descricao}</p>
@@ -267,6 +273,12 @@ export default function ProdutosProntosTab({ user }) {
                           <Puzzle className="w-3 h-3" />
                           {produto.complementos.length}
                         </Badge>
+                      )}
+                      {produto.quantidade === 0 && (
+                        <Badge className="bg-red-100 text-red-600 border-0 text-xs px-1.5 py-0">Sem estoque</Badge>
+                      )}
+                      {produto.quantidade !== null && produto.quantidade > 0 && (
+                        <Badge className="bg-green-100 text-green-700 border-0 text-xs px-1.5 py-0">{produto.quantidade} un.</Badge>
                       )}
                     </div>
                     <div className="flex items-center gap-2 mt-0.5">

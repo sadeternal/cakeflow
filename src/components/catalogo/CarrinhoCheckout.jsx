@@ -288,8 +288,13 @@ export default function CarrinhoCheckout({ confeitaria, carrinho, onClose, onUpd
                             </button>
                             <span className="w-6 text-center text-sm font-medium">{item.quantidade}</span>
                             <button
-                              onClick={() => onUpdateQuantidade(item.id, item.quantidade + 1)}
-                              className="px-2 py-1 hover:bg-gray-50 text-gray-500 transition-colors"
+                              onClick={() => {
+                                const estoqueMax = item.quantidade_estoque;
+                                if (estoqueMax !== null && item.quantidade >= estoqueMax) return;
+                                onUpdateQuantidade(item.id, item.quantidade + 1);
+                              }}
+                              disabled={item.quantidade_estoque !== null && item.quantidade >= item.quantidade_estoque}
+                              className="px-2 py-1 hover:bg-gray-50 text-gray-500 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                             >
                               <Plus className="w-3 h-3" />
                             </button>

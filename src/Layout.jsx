@@ -73,6 +73,7 @@ export default function Layout({ children, currentPageName }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { user } = useAuth();
   const [showTrialExpired, setShowTrialExpired] = useState(false);
+  const [trialInfo, setTrialInfo] = useState(null); // { diasRestantes }
   const isAdminUser = user?.role === 'admin';
   const { trackEvent } = useEventTracker();
   const sessionTrackedRef = useRef(false);
@@ -107,6 +108,9 @@ export default function Layout({ children, currentPageName }) {
         const response = await appClient.functions.invoke('checkSubscriptionStatus');
         if (response.data && response.data.status === 'trial_expired') {
           setShowTrialExpired(true);
+        } else if (response.data && response.data.status === 'trial' && response.data.trialEndsAt) {
+          const diasRestantes = Math.max(0, Math.ceil((new Date(response.data.trialEndsAt) - new Date()) / (1000 * 60 * 60 * 24)));
+          setTrialInfo({ diasRestantes });
         }
       } catch (e) {
         console.error('Erro ao verificar assinatura:', e);
@@ -282,6 +286,24 @@ export default function Layout({ children, currentPageName }) {
 
             })}
           </nav>
+
+          {/* Banner trial */}
+          {trialInfo && !isAdminUser && (
+            <div className="px-4 pb-5">
+              <div className="rounded-2xl bg-rose-50 border border-rose-100 p-4 text-center space-y-3">
+                <p className="text-sm text-rose-700">
+                  Você tem <span className="font-bold">{trialInfo.diasRestantes} {trialInfo.diasRestantes === 1 ? 'dia restante' : 'dias restantes'}</span>
+                </p>
+                <Link
+                  to={createPageUrl('Assinatura')}
+                  onClick={() => setSidebarOpen(false)}
+                  className="block w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-rose-500 to-rose-600 hover:from-rose-600 hover:to-rose-700 text-white text-sm font-semibold shadow-md shadow-rose-200 transition-all text-center"
+                >
+                  Assinar Plano Pro
+                </Link>
+              </div>
+            </div>
+          )}
 
         </div>
       </aside>

@@ -123,22 +123,25 @@ export default function Catalogo() {
     setCarrinho(prev => {
       const itemExistente = prev.find(item => item.id === produto.id);
       if (itemExistente) {
+        const estoqueMax = itemExistente.quantidade_estoque;
+        if (estoqueMax !== null && itemExistente.quantidade >= estoqueMax) return prev;
         return prev.map(item =>
           item.id === produto.id
             ? { ...item, quantidade: item.quantidade + 1 }
             : item
         );
       }
-      return [...prev, { ...produto, quantidade: 1 }];
+      return [...prev, { ...produto, quantidade: 1, quantidade_estoque: produto.quantidade ?? null }];
     });
   };
 
   const adicionarComComplementos = (item) => {
+    const quantidade_estoque = produtoCustomizando?.quantidade ?? null;
     if (editandoItemCarrinho) {
-      setCarrinho(prev => prev.map(i => i === editandoItemCarrinho ? { ...item, quantidade: item.quantidade } : i));
+      setCarrinho(prev => prev.map(i => i === editandoItemCarrinho ? { ...item, quantidade: item.quantidade, quantidade_estoque } : i));
       setEditandoItemCarrinho(null);
     } else {
-      setCarrinho(prev => [...prev, item]);
+      setCarrinho(prev => [...prev, { ...item, quantidade_estoque }]);
     }
   };
 
@@ -152,9 +155,12 @@ export default function Catalogo() {
 
   const updateQuantidadeCarrinho = (produtoId, quantidade) => {
     setCarrinho(prev =>
-      prev.map(item =>
-        item.id === produtoId ? { ...item, quantidade: Math.max(1, quantidade) } : item
-      )
+      prev.map(item => {
+        if (item.id !== produtoId) return item;
+        const estoqueMax = item.quantidade_estoque;
+        const novaQtd = Math.max(1, quantidade);
+        return { ...item, quantidade: estoqueMax !== null ? Math.min(novaQtd, estoqueMax) : novaQtd };
+      })
     );
   };
 
@@ -449,6 +455,11 @@ export default function Catalogo() {
                         {getCategoriaLabel(produto.categoria)}
                       </Badge>
                     )}
+                    {produto.quantidade === 0 && (
+                      <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                        <span className="bg-white text-gray-800 text-xs font-semibold px-2 py-1 rounded-full">Sem estoque</span>
+                      </div>
+                    )}
                   </div>
                   <CardContent className="p-3">
                     <h3 className="font-semibold text-gray-900 text-sm mb-1 line-clamp-1">{produto.nome}</h3>
@@ -461,13 +472,14 @@ export default function Catalogo() {
                       </span>
                     </div>
                     <Button
-                      onClick={() => handleClickProduto(produto)}
-                      style={{ backgroundColor: corPrincipal }}
+                      onClick={() => produto.quantidade !== 0 && handleClickProduto(produto)}
+                      disabled={produto.quantidade === 0}
+                      style={produto.quantidade !== 0 ? { backgroundColor: corPrincipal } : {}}
                       className="hover:opacity-90 w-full"
                       size="sm"
                     >
                       <ShoppingCart className="w-4 h-4 mr-1" />
-                      {produto.complementos?.length > 0 ? 'Personalizar' : 'Adicionar'}
+                      {produto.quantidade === 0 ? 'Sem estoque' : produto.complementos?.length > 0 ? 'Personalizar' : 'Adicionar'}
                     </Button>
                   </CardContent>
                 </Card>
