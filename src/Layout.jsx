@@ -110,7 +110,9 @@ export default function Layout({ children, currentPageName }) {
           setShowTrialExpired(true);
         } else if (response.data && response.data.status === 'trial' && response.data.trialEndsAt) {
           const diasRestantes = Math.max(0, Math.ceil((new Date(response.data.trialEndsAt) - new Date()) / (1000 * 60 * 60 * 24)));
-          setTrialInfo({ diasRestantes });
+          setTrialInfo({ diasRestantes, tipo: 'trial' });
+        } else if (response.data && (response.data.status === 'active' || response.data.status === 'canceling')) {
+          setTrialInfo({ tipo: 'active' });
         }
       } catch (e) {
         console.error('Erro ao verificar assinatura:', e);
@@ -287,8 +289,8 @@ export default function Layout({ children, currentPageName }) {
             })}
           </nav>
 
-          {/* Banner trial */}
-          {trialInfo && !isAdminUser && (
+          {/* Banner assinatura — apenas no trial */}
+          {trialInfo && trialInfo.tipo === 'trial' && !isAdminUser && (
             <div className="px-4 pb-5">
               <div className="rounded-2xl bg-rose-50 border border-rose-100 p-4 text-center space-y-3">
                 <p className="text-sm text-rose-700">
@@ -350,7 +352,21 @@ export default function Layout({ children, currentPageName }) {
                       <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" />
                     </button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-56">
+                  <DropdownMenuContent align="end" className="w-64">
+                    {/* Perfil do usuário */}
+                    <div className="px-3 py-2.5 border-b border-gray-100">
+                      <p className="text-sm font-semibold text-gray-900 truncate">{user.full_name || confeitaria?.nome || 'Usuário'}</p>
+                      <p className="text-xs text-gray-500 truncate">{user.email}</p>
+                    </div>
+                    {/* Status da assinatura */}
+                    {trialInfo && (
+                      <div className={`mx-2 mt-2 mb-1 px-3 py-2 rounded-lg text-xs font-medium text-center ${trialInfo.tipo === 'active' ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
+                        {trialInfo.tipo === 'active'
+                          ? 'Seu plano Pro está ativo.'
+                          : `${trialInfo.diasRestantes} ${trialInfo.diasRestantes === 1 ? 'dia restante' : 'dias restantes'} no trial`}
+                      </div>
+                    )}
+                    <DropdownMenuSeparator className="mt-1" />
                     <DropdownMenuItem asChild>
                       <Link to={createPageUrl('AjusteUsuario')}>
                         <Settings className="w-4 h-4 mr-2" />
