@@ -343,12 +343,6 @@ export default function Layout({ children, currentPageName }) {
                             </div>
                         }
                       </div>
-                      <div className="hidden sm:block text-left">
-                        <p className="text-sm font-medium text-gray-900 leading-tight truncate max-w-[120px]">
-                          {confeitaria?.nome || user.full_name || 'Usuário'}
-                        </p>
-                        <p className="text-xs text-gray-500 truncate max-w-[120px]">{user.email}</p>
-                      </div>
                       <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" />
                     </button>
                   </DropdownMenuTrigger>
