@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { appClient } from '@/api/appClient';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { createPageUrl } from '@/utils';
@@ -7,6 +7,7 @@ import {
   format, parseISO,
   addMonths, subMonths, startOfMonth, endOfMonth,
   getMonth, getYear, setMonth, setYear,
+  eachDayOfInterval, isSameDay, isToday,
 } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
@@ -107,6 +108,8 @@ export default function Pedidos() {
   const [vistaCalendario, setVistaCalendario] = useState(false);
   const [mesCalendario, setMesCalendario] = useState(new Date());
   const [pedidoDiaDialog, setPedidoDiaDialog] = useState(null);
+  const [diaFilter, setDiaFilter] = useState(null);
+  const calendarScrollRef = useRef(null);
   const queryClient = useQueryClient();
 
   useEffect(() => {
@@ -159,6 +162,28 @@ export default function Pedidos() {
 
   const inicioMes = startOfMonth(mesCalendario);
   const fimMes = endOfMonth(mesCalendario);
+  const diasDoMes = eachDayOfInterval({ start: inicioMes, end: fimMes });
+
+  // Reset day filter when month changes
+  useEffect(() => {
+    setDiaFilter(null);
+  }, [getMonth(mesCalendario), getYear(mesCalendario)]);
+
+  // Auto-scroll to today or selected day in the horizontal strip
+  useEffect(() => {
+    if (!calendarScrollRef.current || vistaCalendario) return;
+    const today = new Date();
+    const target = diaFilter || (
+      getMonth(today) === getMonth(mesCalendario) && getYear(today) === getYear(mesCalendario)
+        ? today : inicioMes
+    );
+    const dayIndex = diasDoMes.findIndex(d => isSameDay(d, target));
+    if (dayIndex < 0) return;
+    const cardWidth = 72; // px per card including gap
+    const containerWidth = calendarScrollRef.current.clientWidth;
+    const scrollPos = dayIndex * cardWidth - containerWidth / 2 + cardWidth / 2;
+    calendarScrollRef.current.scrollTo({ left: Math.max(0, scrollPos), behavior: 'smooth' });
+  }, [diaFilter, mesCalendario, vistaCalendario]);
 
   const pedidosDoMes = pedidos.filter(pedido => {
     const dataRef = pedido.data_entrega || pedido.created_date;
@@ -167,18 +192,33 @@ export default function Pedidos() {
     return d >= inicioMes && d <= fimMes;
   });
 
+  const pedidosPorDia = (dia) => pedidosDoMes.filter(p => {
+    const dataRef = p.data_entrega || p.created_date;
+    if (!dataRef) return false;
+    return isSameDay(parseISO(dataRef), dia);
+  });
+
   const filteredPedidos = pedidos.filter(pedido => {
     const matchesSearch =
       pedido.cliente_nome?.toLowerCase().includes(search.toLowerCase()) ||
       pedido.numero?.toLowerCase().includes(search.toLowerCase());
     const matchesStatus = statusFilter === 'todos' || pedido.status === statusFilter;
-    // Filter by selected month using data_entrega, or created_date if no delivery date
     const dataRef = pedido.data_entrega || pedido.created_date;
     if (!dataRef) return false;
     const d = parseISO(dataRef);
+    if (diaFilter) {
+      return isSameDay(d, diaFilter) && matchesSearch && matchesStatus;
+    }
     if (d < inicioMes || d > fimMes) return false;
     return matchesSearch && matchesStatus;
   });
+
+  const scrollCalendar = (direction) => {
+    if (!calendarScrollRef.current) return;
+    const cardWidth = 72;
+    const isMobile = window.innerWidth < 640;
+    calendarScrollRef.current.scrollBy({ left: direction * cardWidth * (isMobile ? 4 : 7), behavior: 'smooth' });
+  };
 
   const handleWhatsApp = (telefone, pedido) => {
     const nome = pedido.cliente_nome || '';
@@ -316,31 +356,85 @@ export default function Pedidos() {
         </div>
       </div>
 
-      {/* Status tabs — oculto em vista calendário */}
-      {!vistaCalendario && <div className="flex gap-2 overflow-x-auto pb-2">
-        <Button
-          variant={statusFilter === 'todos' ? 'default' : 'outline'}
-          size="sm"
-          onClick={() => setStatusFilter('todos')}
-          className={statusFilter === 'todos' ? 'bg-gray-900' : ''}
-        >
-          Todos ({pedidosDoMes.length})
-        </Button>
-        {Object.entries(statusConfig).map(([key, { label, color }]) => {
-          const count = pedidosDoMes.filter(p => p.status === key).length;
-          return (
-            <Button
-              key={key}
-              variant="outline"
-              size="sm"
-              onClick={() => setStatusFilter(key)}
-              className={statusFilter === key ? `${color} border` : ''}
+
+      {/* Calendário horizontal de dias — oculto em vista calendário */}
+      {!vistaCalendario && (
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-9 w-9 shrink-0 border-gray-200 text-gray-600 hover:bg-gray-50 hidden sm:flex"
+            onClick={() => scrollCalendar(-1)}
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </Button>
+
+          <div
+            ref={calendarScrollRef}
+            className="flex gap-2 overflow-x-auto flex-1 scroll-smooth"
+            style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', WebkitOverflowScrolling: 'touch' }}
+          >
+            {/* "Todos" card */}
+            <button
+              onClick={() => setDiaFilter(null)}
+              className={cn(
+                'flex flex-col items-center justify-center rounded-xl px-3 py-2.5 min-w-[60px] shrink-0 border transition-all text-sm',
+                !diaFilter
+                  ? 'bg-gray-900 text-white border-gray-900 shadow-md'
+                  : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+              )}
             >
-              {label} ({count})
-            </Button>
-          );
-        })}
-      </div>}
+              <span className="text-[10px] font-medium uppercase tracking-wide opacity-70 mb-0.5">Todos</span>
+              <span className="text-base font-bold leading-none">{pedidosDoMes.length}</span>
+            </button>
+
+            {diasDoMes.map((dia) => {
+              const count = pedidosPorDia(dia).length;
+              const isSelected = diaFilter && isSameDay(dia, diaFilter);
+              const isTodayDate = isToday(dia);
+              return (
+                <button
+                  key={dia.toISOString()}
+                  onClick={() => setDiaFilter(isSelected ? null : dia)}
+                  className={cn(
+                    'flex flex-col items-center justify-center rounded-xl px-2 py-2.5 min-w-[60px] shrink-0 border transition-all relative',
+                    isSelected
+                      ? 'bg-rose-500 text-white border-rose-500 shadow-md'
+                      : isTodayDate
+                      ? 'bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-100'
+                      : count > 0
+                      ? 'bg-white text-gray-700 border-gray-200 hover:border-rose-200 hover:bg-rose-50'
+                      : 'bg-white text-gray-400 border-gray-100 hover:border-gray-200'
+                  )}
+                >
+                  <span className={cn('text-[10px] font-medium uppercase tracking-wide mb-0.5', isSelected ? 'text-rose-100' : 'opacity-60')}>
+                    {format(dia, 'EEE', { locale: ptBR })}
+                  </span>
+                  <span className="text-base font-bold leading-none">{format(dia, 'd')}</span>
+                  {count > 0 && (
+                    <span className={cn(
+                      'mt-1 text-[9px] font-bold rounded-full w-4 h-4 flex items-center justify-center',
+                      isSelected ? 'bg-white text-rose-500' : 'bg-rose-500 text-white'
+                    )}>
+                      {count}
+                    </span>
+                  )}
+                  {count === 0 && <span className="mt-1 h-4" />}
+                </button>
+              );
+            })}
+          </div>
+
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-9 w-9 shrink-0 border-gray-200 text-gray-600 hover:bg-gray-50 hidden sm:flex"
+            onClick={() => scrollCalendar(1)}
+          >
+            <ChevronRight className="w-4 h-4" />
+          </Button>
+        </div>
+      )}
 
       {/* Vista Calendário */}
       {vistaCalendario && (
